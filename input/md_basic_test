@@ -1,0 +1,30 @@
+# testcase parameters
+testcase : md_basic_test
+only_md : True
+
+# material parameters
+n_species : 2
+mass : 1.6726219e-24, 4.5129913e-23
+charge : 1.0, 11.5355
+initial_density : 6.0e22, 6.0e22
+initial_temperature : 1000, 500
+initial_velocity : 0, 0
+
+# BGK simulation parameters
+n_vel : 100
+tau_update_rate : 5000
+
+# MD simulation parameters
+timestep_md : 0.01
+n_timesteps_md : 10
+friction : 0.5, 0.1
+equilibration_time : 0.01, 0.01
+small_box_equilibration : 0.1
+n_simulations_md : 2
+cell_length_md : 21
+cutoff_md : 10
+movie_rate : 5
+mts_cutoff_md : 0.5
+mts_threshold_md : 1e-5
+mts_timesteps_md : 100
+md_save_rate : 5
