@@ -463,7 +463,7 @@ class simulation(object):
             logging.debug('writing phasespace every %d timesteps' % self.md_save_rate)
         except KeyError:
             logging.debug('missing key \'md_save_rate\', default is never')
-            slef.md_save_rate = 0
+            self.md_save_rate = 0
 
         try:
             self.md_resample = bool(param_dict['md_resample'])
