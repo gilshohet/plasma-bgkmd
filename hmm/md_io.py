@@ -726,7 +726,7 @@ def equilibrate_md(params, md, print_rate=10, save_rate=1000):
 
 def simulate_md(params, distribution, md, print_rate=10, resample=True,
                 atol=[1e-2, 1.5e-2, 2e-2], rtol=[1e-2, 1e-2, 2e-2, 2e-2],
-                refresh_rate=0, save_rate=1000):
+                refresh_rate=0, save_rate=1000, resume=False, last_step=0):
     ''' run the specified number of md simulations for the desired number of
     time steps and collect data on energy, dHdt, and moments
 
@@ -750,8 +750,13 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
         how often to refresh the distribution based on average temperature
         0 -> never
     save_rate : int
-        how often to save the phasespace
+        how often to save the phasespace and data for restart
         0 -> never
+    resume : boolean
+        whether resuming from a previous simulation
+    last_step : int
+        step to resume from
+        0 -> not resuming
 
     Returns
     -------
@@ -786,7 +791,7 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
         logging.info('---------------------------------------------------')
 
         # velocity resample if needed
-        if resample:
+        if resample and not resume:
             vel = velocity_resample(distribution, params, atol, rtol)
             set_md_phasespace(pos0, vel, md)
 
@@ -796,11 +801,28 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
         md.conservation()
         md.movie()
         md.naughtypair()
-        energy[sim,0,:] = get_md_conservation(md)
-        data.get_md_data(sim, 0, params, md, distribution)
+        if not resume:
+            energy[sim,0,:] = get_md_conservation(md)
+            data.get_md_data(sim, 0, params, md, distribution)
+        else:
+            logging.info("reinitializing previous simulation data")
+            energy[sim,:last_step+1,:] = \
+                    np.load('energy.npy')[sim,:last_step+1,:]
+            data.dHdt[sim,:last_step+1,:,:] = \
+                    np.load('data.dHdt.npy')[sim,:last_step+1,:,:]
+            data.momentum[sim,:last_step+1,:,:] = \
+                    np.load('data.momentum.npy')[sim,:last_step+1,:,:]
+            data.stress[sim,:last_step+1,:,:,:] = \
+                    np.load('data.stress.npy')[sim,:last_step+1,:,:,:]
+            data.kinetic_energy[sim,:last_step+1,:] = \
+                    np.load('data.kinetic_energy.npy')[sim,:last_step+1,:]
+            data.heat[sim,:last_step+1,:,:] = \
+                    np.load('data.heat.npy')[sim,:last_step+1,:,:]
+            data.m4[sim,:last_step+1,:] = \
+                    np.load('data.m4.npy')[sim,:last_step+1,:]
 
         # loop over time
-        for step in range(1, params.n_timesteps+1):
+        for step in range(last_step+1, params.n_timesteps+1):
             if step % print_rate == 0:
                 logging.info('timestep %d of %d for simulation %d of %d' %
                       (step, params.n_timesteps, sim+1, params.n_sims))
@@ -859,15 +881,23 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
                 md.movie()
             data.get_md_data(sim, step, params, md, distribution)
 
-            # save phasespace every 1000 timesteps
+            # save data every save_rate timesteps
             if save_rate > 0 and step % save_rate == 0:
-                logging.debug('saving simulation phase space at time step %d' % step)
+                logging.debug('saving simulation data at time step %d' % step)
                 pos, vel = get_md_phasespace(md)
-                species = np.array(md.particles_mod.sp[:])
-                species = species.reshape((params.n_particles, 1))
-                specposvel = np.concatenate((species, pos, vel), axis=1)
-                filename = 'phasespace_sim%d_step%d.dat' % (sim+1, step)
-                specposvel.tofile(filename)
+
+                # write output to files
+                np.save('energy', energy)
+                np.save('data.momentum', data.momentum)
+                np.save('data.stress', data.stress)
+                np.save('data.kinetic_energy', data.kinetic_energy)
+                np.save('data.heat', data.heat)
+                np.save('data.m4', data.m4)
+                np.save('data.dHdt', data.dHdt)
+                np.save('data.mass', data.mass)
+                np.save('data.time', data.time)
+                np.save('end_pos', pos)
+                np.save('end_vel', vel)
 
             # update distributions if needed
             if refresh_rate > 0 and step % refresh_rate == 0:

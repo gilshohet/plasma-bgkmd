@@ -993,14 +993,15 @@ subroutine openFiles
         open(13, file='out_md/out_conservation.dat', position='append', status='unknown')
         open(15, file='out_md/out_movie.xyz', position='append', status='unknown')
         open(17, file='out_md/out_equil_movie.xyz', position='append', status='unknown')
+        open(19, file='out_md/out_MD_phaseSpace.dat', access='stream', status='unknown')
     else
         open(23, file='out_md/out_largest_acceleration.dat', status='replace')
         open(21, file='out_md/out_shortest_distance.dat', status='replace')
         open(13, file='out_md/out_conservation.dat', status='replace')
         open(15, file='out_md/out_movie.xyz', status='replace')
         open(17, file='out_md/out_equil_movie.xyz', status='replace')
+        open(19, file='out_md/out_MD_phaseSpace.dat', access='stream', status='replace')
     end if
-    open(19, file='out_md/out_MD_phaseSpace.dat', access='stream', status='replace')
 
 end subroutine openFiles
 !

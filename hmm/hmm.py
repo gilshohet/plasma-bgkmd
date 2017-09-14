@@ -113,6 +113,10 @@ class simulation(object):
         whether to do the velocity resample after equilibration
     md_nprocs : int
         limit how many processors to use in MD (default all)
+    md_resume : bool
+        whether resuming from a previous simulation
+    md_last_step : int 
+        last step taking if resuming, 0 else
 
     Simulation state parameters (not loaded from input file)
     --------------------------------------------------------
@@ -476,6 +480,21 @@ class simulation(object):
             self.md_nprocs = 1000000
 
         try:
+            self.md_resume = bool(param_dict['md_resume'])
+        except KeyError:
+            self.md_resume = False
+
+        if self.md_resume:
+            try:
+                self.md_last_step = int(param_dict['md_last_step'])
+                logging.info('Resuming at time step ' + str(self.md_last_step))
+            except KeyError:
+                err = "missing key \'md_last_step\' for resume"
+                raise KeyError(err)
+        else:
+            self.md_last_step = 0
+
+        try:
             initial_density = (np.fromstring(param_dict['initial_density'], 
                                              sep=',') / units.cm**3) 
             if len(initial_density) != self.n_species * self.n_cells_bgk:
@@ -701,7 +720,7 @@ class simulation(object):
             md_io.equilibrate_md(md_params, md, print_rate=100,
                                  save_rate=self.md_save_rate)
             md.closefiles()
-
+    
             # run the simulations
             logging.debug('starting simulation phase')
             md.openfiles()
@@ -882,45 +901,58 @@ class simulation(object):
                 species, pos0, vel0 = md_io.generate_md_phasespace(md_params)
                 md_io.set_md_phasespace(pos0, vel0, md)
     
-                # equilibration
-                md_io.equilibrate_md(md_params, md, print_rate=1000,
-                                     save_rate=self.md_save_rate)
-                pos1, vel1 = md_io.get_md_phasespace(md)
+                if not self.md_resume:
+                    # equilibration
+                    md_io.equilibrate_md(md_params, md, print_rate=1000,
+                                         save_rate=self.md_save_rate)
+                    pos1, vel1 = md_io.get_md_phasespace(md)
     
                 # expand the box and set up parameters
                 md_io.expand_md_box(md_params, md)
     
             # first equilibration on full box
-            logging.debug('first full-size equilibration')
-            md_params.equilibration_time = self.equilibration_time[0]
-            md_io.equilibrate_md(md_params, md, print_rate=100,
-                                 save_rate=self.md_save_rate)
+            if self.equilibration_time[0] > 0 and not self.md_resume:
+                logging.debug('first full-size equilibration')
+                md_params.equilibration_time = self.equilibration_time[0]
+                md_io.equilibrate_md(md_params, md, print_rate=100,
+                                     save_rate=self.md_save_rate)
     
             # second equilibration on full box
-            logging.debug('second full-size equilibration')
-            md_params.change_friction(self.friction[1], md)
-            md_io.equilibrate_md(md_params, md, print_rate=100,
-                                 save_rate=self.md_save_rate)
+            if self.equilibration_time[1] > 0 and not self.md_resume:
+                logging.debug('second full-size equilibration')
+                md_params.change_friction(self.friction[1], md)
+                md_io.equilibrate_md(md_params, md, print_rate=100,
+                                     save_rate=self.md_save_rate)
             md.closefiles()
-    
+            md.openfiles()
+ 
             # run the simulations
             logging.debug('starting simulation phase')
-            md.openfiles()
-            pos, vel = md_io.get_md_phasespace(md)
-            np.save('start_pos', pos)
+            if not self.md_resume:
+                pos, vel = md_io.get_md_phasespace(md)
+                np.save('start_pos', pos)
+            else:
+                logging.info("reinitializing previous simulation phase space")
+                pos = np.load('end_pos.npy')
+                vel = np.load('end_vel.npy')
+                md_io.set_md_phasespace(pos, vel, md)
 
             if self.tau_update_rate > 0 and not self.only_md:
                 energy, data, distribution_log = md_io.simulate_md(
                     md_params, self.distribution[cell,:], md, print_rate=100,
                     resample=self.md_resample,
                     refresh_rate=self.tau_update_rate,
-                    save_rate=self.md_save_rate)
+                    save_rate=self.md_save_rate,
+                    resume = self.md_resume,
+                    last_step = self.md_last_step)
             else:
                 energy, data = md_io.simulate_md(
                     md_params, self.distribution[cell,:], md, print_rate=100,
                     resample=self.md_resample,
                     refresh_rate=0,
-                    save_rate=self.md_save_rate)
+                    save_rate=self.md_save_rate,
+                    resume = self.md_resume,
+                    last_step = self.md_last_step)
 
 
             # write output to files

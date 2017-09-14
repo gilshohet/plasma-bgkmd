@@ -142,7 +142,9 @@ regular time step for the labeled particles, default is 100
 * `movie_rate` : how often to save data for an ovito movie (I think this is
 somewhat broken right now and the movies will overwrite themselves if doing
 multiple simulations)
-* `md_save_rate` : how often to save MD phasespace
+* `md_save_rate` : how often to save MD phasespace and data for future resume
+* `md_resume` : whether resuming from previous simulation, default is false
+* `md_last_step` : last step taken to resume from, default is 0
 * `md_resample` : whether or not to resample velocity distribution
 after equilibrating the MD simulation
 * `md_nprocs` : how mnay processors to use for the MD simulation (openMP
