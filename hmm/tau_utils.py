@@ -113,12 +113,22 @@ def compute_taus(params, distribution, dHdt):
             error[sp2,sp1] = err[1]
 
     # if intraspecies taus essentially zero, use analytical form
-    analytical_taus = momentum_transfer_tau(params)
+    analytical_taus = temperature_relaxation_taus(params)
     logging.debug('temperature relaxation taus are:\n' + np.array_str(analytical_taus))
     logging.debug('computed taus from md are:\n' + np.array_str(taus))
     for sp in range(params.n_species):
-        if 1: #taus[sp,sp] < 1e-2:
+        if taus[sp,sp] / analytical_taus[sp,sp] < 1e-6:
             taus[sp,sp] = analytical_taus[sp,sp]
+            logging.debug('using analytical taus for species %d' % (sp))
+
+    # if taus are the wrong sign, use analytical form
+    for sp1 in range(params.n_species):
+        for sp2 in range(params.n_species):
+            if taus[sp1, sp2] < 0:
+                taus[sp1,sp2] = analytical_taus[sp1,sp2]
+
+                logging.debug('negative taus detected. using analytical taus' +
+                              ' for species pair (%d,%d)' % (sp1, sp2))
 
     return taus, error
 

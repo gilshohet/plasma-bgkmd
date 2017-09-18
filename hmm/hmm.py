@@ -17,6 +17,7 @@ import distributions
 import moments
 import units
 import numpy as np
+import scipy.stats as stats
 import os
 import logging
 
@@ -84,6 +85,8 @@ class simulation(object):
         timestep to take in md as proportion of 1 / plasma_frequency
     n_timesteps_md : int
         number of timesteps to take in each md simulation
+    max_timesteps_md : int
+        max number of timesteps to take in each md simulation if too noisy
     friction : array of 2 floats
         equilibration power as function of plasma_frequency, for the strong
         and weak thermostat phases
@@ -367,6 +370,12 @@ class simulation(object):
         except KeyError:
             err = 'missing parameter \'n_timesteps_md\''
             raise KeyError(err)
+
+        try:
+            self.max_timesteps_md = int(param_dict['max_timesteps_md'])
+            logging.debug('max number of MD steps: %d' % self.max_timesteps_md)
+        except KeyError:
+            self.max_timesteps_md = n_timesteps_md
 
         try:
             self.equilibration_time = \
@@ -728,6 +737,24 @@ class simulation(object):
                                              self.distribution[cell,:], md,
                                              print_rate=100,
                                              save_rate=self.md_save_rate)
+            # check the taus
+            timesteps_elapsed = self.n_timesteps_md
+            while timesteps_elapsed < self.max_timesteps_md:
+                mean = data.dHdt[0].mean(axis=0)
+                std = data.dHdt.std(axis=0, ddof=1)
+                (lb, ub) = stats.norm.interval(
+                    0.95, loc=mean, scale=std/np.sqrt(timesteps_elapsed))
+                if np.any(lb * ub < 0):
+                    md_params.n_timesteps += self.save_rate
+                    energy, data = md_io.simulate_md(
+                        md_params, self.distribution[cell,:], md,
+                        print_rate=100, resample=False,
+                        save_rate=self.md_save_rate,
+                        resume=True, last_step=timesteps_elapsed)
+                    timesteps_elapsed += self.save_rate
+                else:
+                    break
+
             md.closefiles()
 
             # save data for auditing
@@ -736,7 +763,7 @@ class simulation(object):
             np.save('data.stress', data.stress)
             np.save('data.kinetic_energy', data.kinetic_energy)
             np.save('data.heat', data.heat)
-            np.save('data.m4', data.m4)
+            np.save('data.m5', data.m4)
             np.save('data.dHdt', data.dHdt)
             np.save('data.mass', data.mass)
             np.save('data.time', data.time)
@@ -943,16 +970,16 @@ class simulation(object):
                     resample=self.md_resample,
                     refresh_rate=self.tau_update_rate,
                     save_rate=self.md_save_rate,
-                    resume = self.md_resume,
-                    last_step = self.md_last_step)
+                    resume=self.md_resume,
+                    last_step=self.md_last_step)
             else:
                 energy, data = md_io.simulate_md(
                     md_params, self.distribution[cell,:], md, print_rate=100,
                     resample=self.md_resample,
                     refresh_rate=0,
                     save_rate=self.md_save_rate,
-                    resume = self.md_resume,
-                    last_step = self.md_last_step)
+                    resume=self.md_resume,
+                    last_step=self.md_last_step)
 
 
             # write output to files

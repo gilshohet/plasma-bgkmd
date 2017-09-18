@@ -123,6 +123,9 @@ when gathering data to compute relaxation times
 shortest plasma period (timestep is timestep\_md / f\_p)
 * `friction` : how powerful the thermostat is, as fraction of plasma frequency
 * `n_timesteps_md` : number of timesteps to take in the MD simulations
+* `max_timesteps_md` : max number of timesteps for MD simulation if the
+statistics are bad (default is only take `n_timesteps_md` steps). Note: need 
+`save_rate` % `n_timesteps_md` = 0 and `save_rate % max_timesteps_md` = 0.
 * `equilibration_time` : equlibration times in terms of slowest plasma period
 for the strong and weak thermostat phases
 * `small_box_equilibration` : equilibration time in terms of slowest plasma
