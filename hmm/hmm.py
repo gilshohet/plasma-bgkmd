@@ -375,7 +375,7 @@ class simulation(object):
             self.max_timesteps_md = int(param_dict['max_timesteps_md'])
             logging.debug('max number of MD steps: %d' % self.max_timesteps_md)
         except KeyError:
-            self.max_timesteps_md = n_timesteps_md
+            self.max_timesteps_md = self.n_timesteps_md
 
         try:
             self.equilibration_time = \
