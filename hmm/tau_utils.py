@@ -117,7 +117,7 @@ def compute_taus(params, distribution, dHdt):
     logging.debug('temperature relaxation taus are:\n' + np.array_str(analytical_taus))
     logging.debug('computed taus from md are:\n' + np.array_str(taus))
     for sp in range(params.n_species):
-        if taus[sp,sp] / analytical_taus[sp,sp] < 1e-6:
+        if taus[sp,sp] / analytical_taus[sp,sp] < 1e-2:
             taus[sp,sp] = analytical_taus[sp,sp]
             logging.debug('using analytical taus for species %d' % (sp))
 
