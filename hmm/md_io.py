@@ -632,26 +632,42 @@ def velocity_resample(distribution, params, atol=[1e-2, 1.5e-2, 2e-2],
                     particle_moments(tmp_vel, params.mass[s])
 
             # check moments
-            if not np.logical_or(
-                    (abs((d_momentum - p_momentum) / d_momentum) < rtol[0]),
-                    (abs((d_momentum - p_momentum) / 
-                        (params.mass[s] * thermal_speed[s]))
-                     < atol[0])).all():
+            r_momentum_err = abs((d_momentum - p_momentum) / d_momentum)
+            a_momentum_err = (abs((d_momentum - p_momentum) /
+                              (params.mass[s] * thermal_speed[s])))
+            r_stress_err = abs((d_stress - p_stress) / d_stress)
+            a_stress_err = (abs((d_stress - p_stress) /
+                              (params.mass[s] * thermal_speed[s]**2)))
+            r_heat_err = abs((d_heat - p_heat) / d_heat)
+            a_heat_err = (abs((d_heat - p_heat) /
+                              (params.mass[s] * thermal_speed[s]**3)))
+            r_m4_err = abs((d_m4 - p_m4) / d_m4)
+            if not np.logical_or(r_momentum_err < rtol[0],
+                                 a_momentum_err < atol[0]).all():
                 bad_sample += 1
-            if not np.logical_or(
-                    (abs((d_stress - p_stress) / d_stress) < rtol[1]),
-                    (abs((d_stress - p_stress) / 
-                        (params.mass[s] * thermal_speed[s]**2))
-                     < atol[1])).all():
+#               print('r_momentum_err ', r_momentum_err)
+#               print('a_momentum_err ', a_momentum_err)
+#               print('rtol: %f, atol: %f' % (rtol[0], atol[0]))
+            if not np.logical_or(r_stress_err < rtol[1],
+                                 a_stress_err < atol[1]).all():
                 bad_sample += 10
+#               print('r_stress_err ', r_stress_err)
+#               print('a_stress_err ', a_stress_err)
+#               print('rtol: %f, atol: %f' % (rtol[1], atol[1]))
             if not np.logical_or(
                     (abs((d_heat - p_heat) / d_heat) < rtol[2]),
                     (abs((d_heat - p_heat) /
                          (params.mass[s] * thermal_speed[s]**3))
                      < atol[2])).all():
                 bad_sample += 100
-            if not abs((d_m4 - p_m4) / d_m4) < rtol[3]:
+#               print('r_heat_err ', r_heat_err)
+#               print('a_heat_err ', a_heat_err)
+#               print('rtol: %f, atol: %f' % (rtol[2], atol[2]))
+            if not abs(r_m4_err < rtol[3]):
                 bad_sample += 1000
+#               print('r_m4_err ', r_m4_err)
+#               print('rtol: %f' % (rtol[3]))
+#           print('bad sample %d' % (bad_sample))
 
         logging.info('Species %d took %d trials.' % (s, trials))
         vel[counter:counter+n,:] = tmp_vel
@@ -725,7 +741,7 @@ def equilibrate_md(params, md, print_rate=10, save_rate=1000):
 
 
 def simulate_md(params, distribution, md, print_rate=10, resample=True,
-                atol=[1e-2, 1.5e-2, 2e-2], rtol=[1e-2, 1e-2, 2e-2, 2e-2],
+                atol=[1e-2, 1.5e-2, 2e-2], rtol=[1e-2, 1.5e-2, 2e-2, 2e-2],
                 refresh_rate=0, save_rate=1000, resume=False, last_step=0):
     ''' run the specified number of md simulations for the desired number of
     time steps and collect data on energy, dHdt, and moments
