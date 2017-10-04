@@ -859,7 +859,7 @@ class simulation(object):
         '''
 
         # loop over time
-        while self.current_time < self.final_time:
+        while self.current_time < self.final_time - self.timestep_bgk*0.01:
             self.march_simulation()
 
     def run_md(self):
