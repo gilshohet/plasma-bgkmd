@@ -24,7 +24,7 @@ bgk_path : /home/BGKMD/BGK2.0/MultiBGK/
 timestep_md : 0.0005
 n_timesteps_md : 8000
 max_timesteps_md : 20000
-save_rate : 2000
+md_save_rate : 2000
 friction : 0.5, 0.1
 equilibration_time : 0.75, 0.75
 small_box_equilibration : 5.0

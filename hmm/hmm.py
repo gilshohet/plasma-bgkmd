@@ -737,21 +737,25 @@ class simulation(object):
                                              self.distribution[cell,:], md,
                                              print_rate=100,
                                              save_rate=self.md_save_rate)
-            # check the taus
+            # check the dHdt
             timesteps_elapsed = self.n_timesteps_md
             while timesteps_elapsed < self.max_timesteps_md:
                 mean = data.dHdt[0].mean(axis=0)
-                std = data.dHdt.std(axis=0, ddof=1)
+                std = data.dHdt[0].std(axis=0, ddof=1)
                 (lb, ub) = stats.norm.interval(
                     0.95, loc=mean, scale=std/np.sqrt(timesteps_elapsed))
+                logging.debug('mean: \n' + np.array_str(mean))
+                logging.debug('std: \n' + np.array_str(std))
+                logging.debug('lower bound: \n' + np.array_str(lb)) 
+                logging.debug('upper bound: \n' + np.array_str(ub)) 
                 if np.any(lb * ub < 0):
-                    md_params.n_timesteps += self.save_rate
+                    md_params.n_timesteps += self.md_save_rate
                     energy, data = md_io.simulate_md(
                         md_params, self.distribution[cell,:], md,
                         print_rate=100, resample=False,
                         save_rate=self.md_save_rate,
                         resume=True, last_step=timesteps_elapsed)
-                    timesteps_elapsed += self.save_rate
+                    timesteps_elapsed += self.md_save_rate
                 else:
                     break
 

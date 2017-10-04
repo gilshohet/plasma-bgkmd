@@ -103,122 +103,126 @@ def compute_interspecies_tau(distribution1, distribution2, dHdt12, dHdt21):
     # initial guess for tau ratio, assume temperature relaxation
     tau_ratio0 = n2 / n1
 
-    # mixture quantitities
-    f12, f21, u12, T12 = distributions.equilibrium_maxwellian3D(
-            n1, n2, u1, u2, T1, T2, m1, m2, vx1, vy1, vz1, vx2, vy2, vz2,
-            tau_ratio0, return_all=True)
+#   # mixture quantitities
+#   f12, f21, u12, T12 = distributions.equilibrium_maxwellian3D(
+#           n1, n2, u1, u2, T1, T2, m1, m2, vx1, vy1, vz1, vx2, vy2, vz2,
+#           tau_ratio0, return_all=True)
 
-    # dH in the kinetic sense
-    dH12_bgk = (triple_integral(f12 * np.log(f1), vx1, vy1, vz1) - 
-                triple_integral(f1 * np.log(f1), vx1, vy1, vz1))
-    dH21_bgk = (triple_integral(f21 * np.log(f2), vx2, vy2, vz2) - 
-                triple_integral(f2 * np.log(f2), vx2, vy2, vz2))
+#   # dH in the kinetic sense
+#   dH12_bgk = (triple_integral(f12 * np.log(f1), vx1, vy1, vz1) - 
+#               triple_integral(f1 * np.log(f1), vx1, vy1, vz1))
+#   dH21_bgk = (triple_integral(f21 * np.log(f2), vx2, vy2, vz2) - 
+#               triple_integral(f2 * np.log(f2), vx2, vy2, vz2))
 
-    # least squares functions
-    def residual(tau_ratio):
-        tau_ratio = tau_ratio[0]
-        # mixture quantitities
-        f12, f21, u12, T12 = distributions.equilibrium_maxwellian3D(
-                n1, n2, u1, u2, T1, T2, m1, m2, vx1, vy1, vz1, vx2, vy2, vz2,
-                tau_ratio, return_all=True)
+#   # least squares functions
+#   def residual(tau_ratio):
+#       tau_ratio = tau_ratio[0]
+#       # mixture quantitities
+#       f12, f21, u12, T12 = distributions.equilibrium_maxwellian3D(
+#               n1, n2, u1, u2, T1, T2, m1, m2, vx1, vy1, vz1, vx2, vy2, vz2,
+#               tau_ratio, return_all=True)
 
-        # dH in the kinetic sense
-        dH12_bgk = (triple_integral(f12 * np.log(f1), vx1, vy1, vz1) - 
-                    triple_integral(f1 * np.log(f1), vx1, vy1, vz1))
-        dH21_bgk = (triple_integral(f21 * np.log(f2), vx2, vy2, vz2) - 
-                    triple_integral(f2 * np.log(f2), vx2, vy2, vz2))
+#       # dH in the kinetic sense
+#       dH12_bgk = (triple_integral(f12 * np.log(f1), vx1, vy1, vz1) - 
+#                   triple_integral(f1 * np.log(f1), vx1, vy1, vz1))
+#       dH21_bgk = (triple_integral(f21 * np.log(f2), vx2, vy2, vz2) - 
+#                   triple_integral(f2 * np.log(f2), vx2, vy2, vz2))
 #       tau_kl = ((dHdt12 * dH12_bgk + tau_ratio * dHdt21 * dH21_bgk) / 
 #                 (dHdt12**2 + dHdt21**2))
-        tau_kl = (((dH12_bgk * dHdt21 * tau_ratio)**2 + (dH21_bgk * dHdt12)**2) /
-                  (dHdt12 * dHdt21 * tau_ratio * 
-                   (dH12_bgk * dHdt21 * tau_ratio + dH21_bgk * dHdt12)))
-        resid =  np.array([(dHdt12 - dH12_bgk / tau_kl) / dHdt12,
-                           (dHdt21 - dH21_bgk / (tau_kl * tau_ratio)) / dHdt21])
-        logging.debug('residual: ' + np.array_str(resid))
-        logging.debug('ratio of taus: %d' % tau_ratio)
-        return resid
+#       tau_kl = (((dH12_bgk * dHdt21 * tau_ratio)**2 + (dH21_bgk * dHdt12)**2) /
+#                 (dHdt12 * dHdt21 * tau_ratio * 
+#                  (dH12_bgk * dHdt21 * tau_ratio + dH21_bgk * dHdt12)))
+#       resid =  np.array([(dHdt12 - dH12_bgk / tau_kl) / dHdt12,
+#                          (dHdt21 - dH21_bgk / (tau_kl * tau_ratio)) / dHdt21])
+#       logging.debug('residual: ' + np.array_str(resid))
+#       logging.debug('ratio of taus: %f' % tau_ratio)
+#       return resid
 
-    def jacobian(tau_ratio):
-	''' ANALYTICAL JACOBIAN DOES NOT CURRENTLY SEEM TO WORK '''
-        tau_ratio = tau_ratio[0]
+#   def jacobian(tau_ratio):
+#       ''' ANALYTICAL JACOBIAN DOES NOT CURRENTLY SEEM TO WORK '''
+#       tau_ratio = tau_ratio[0]
 
-        # mixture quantitities
-        f12, f21, u12, T12 = distributions.equilibrium_maxwellian3D(
-                n1, n2, u1, u2, T1, T2, m1, m2, vx1, vy1, vz1, vx2, vy2, vz2,
-                tau_ratio, return_all=True)
-        A12 = n1 * (m1 / (2. * np.pi * T12))**(3./2.)
-        A21 = n2 * (m2 / (2. * np.pi * T12))**(3./2.)
-        # dH in the kinetic sense
-        dH12_bgk = (triple_integral(f12 * np.log(f1), vx1, vy1, vz1) - 
-                    triple_integral(f1 * np.log(f1), vx1, vy1, vz1))
-        dH21_bgk = (triple_integral(f21 * np.log(f2), vx2, vy2, vz2) - 
-                    triple_integral(f2 * np.log(f2), vx2, vy2, vz2))
-        tau12 = (((dH12_bgk * dHdt21 * tau_ratio)**2 + (dH21_bgk * dHdt12)**2) /
-                 (dHdt12 * dHdt21 * tau_ratio * 
-                  (dH12_bgk * dHdt21 * tau_ratio + dH21_bgk * dHdt12)))
+#       # mixture quantitities
+#       f12, f21, u12, T12 = distributions.equilibrium_maxwellian3D(
+#               n1, n2, u1, u2, T1, T2, m1, m2, vx1, vy1, vz1, vx2, vy2, vz2,
+#               tau_ratio, return_all=True)
+#       A12 = n1 * (m1 / (2. * np.pi * T12))**(3./2.)
+#       A21 = n2 * (m2 / (2. * np.pi * T12))**(3./2.)
+#       # dH in the kinetic sense
+#       dH12_bgk = (triple_integral(f12 * np.log(f1), vx1, vy1, vz1) - 
+#                   triple_integral(f1 * np.log(f1), vx1, vy1, vz1))
+#       dH21_bgk = (triple_integral(f21 * np.log(f2), vx2, vy2, vz2) - 
+#                   triple_integral(f2 * np.log(f2), vx2, vy2, vz2))
+#       tau12 = (((dH12_bgk * dHdt21 * tau_ratio)**2 + (dH21_bgk * dHdt12)**2) /
+#                (dHdt12 * dHdt21 * tau_ratio * 
+#                 (dH12_bgk * dHdt21 * tau_ratio + dH21_bgk * dHdt12)))
 
-        # integrals
-        vsq1 = (vx1 - u12[0])**2 + (vy1 - u12[1])**2 + (vz1 - u12[2])**2
-        f1logf1 = triple_integral(f1 * np.log(f1), vx1, vy1, vz1)
-        f12logf1 = triple_integral(f12 * np.log(f1), vx1, vy1, vz1)
-        vf12logf1 = np.array([
-            triple_integral((vx1 - u12[0]) * f12 * np.log(f1), vx1, vy1, vz1),
-            triple_integral((vy1 - u12[1]) * f12 * np.log(f1), vx1, vy1, vz1),
-            triple_integral((vz1 - u12[2]) * f12 * np.log(f1), vx1, vy1, vz1)])
-        vsqf12logf1 = triple_integral(vsq1 * f12 * np.log(f1), vx1, vy1, vz1)
-        vsq2 = (vx2 - u12[0])**2 + (vy2 - u12[1])**2 + (vz2 - u12[2])**2
-        f2logf2 = triple_integral(f2 * np.log(f2), vx2, vy2, vz2)
-        f21logf2 = triple_integral(f21 * np.log(f2), vx2, vy2, vz2)
-        vf21logf2 = np.array([
-            triple_integral((vx2 - u12[0]) * f21 * np.log(f2), vx2, vy2, vz2),
-            triple_integral((vy2 - u12[1]) * f21 * np.log(f2), vx2, vy2, vz2),
-            triple_integral((vz2 - u12[2]) * f21 * np.log(f2), vx2, vy2, vz2)])
-        vsqf21logf2 = triple_integral(vsq2 * f21 * np.log(f2), vx2, vy2, vz2)
-            
+#       # integrals
+#       vsq1 = (vx1 - u12[0])**2 + (vy1 - u12[1])**2 + (vz1 - u12[2])**2
+#       f1logf1 = triple_integral(f1 * np.log(f1), vx1, vy1, vz1)
+#       f12logf1 = triple_integral(f12 * np.log(f1), vx1, vy1, vz1)
+#       vf12logf1 = np.array([
+#           triple_integral((vx1 - u12[0]) * f12 * np.log(f1), vx1, vy1, vz1),
+#           triple_integral((vy1 - u12[1]) * f12 * np.log(f1), vx1, vy1, vz1),
+#           triple_integral((vz1 - u12[2]) * f12 * np.log(f1), vx1, vy1, vz1)])
+#       vsqf12logf1 = triple_integral(vsq1 * f12 * np.log(f1), vx1, vy1, vz1)
+#       vsq2 = (vx2 - u12[0])**2 + (vy2 - u12[1])**2 + (vz2 - u12[2])**2
+#       f2logf2 = triple_integral(f2 * np.log(f2), vx2, vy2, vz2)
+#       f21logf2 = triple_integral(f21 * np.log(f2), vx2, vy2, vz2)
+#       vf21logf2 = np.array([
+#           triple_integral((vx2 - u12[0]) * f21 * np.log(f2), vx2, vy2, vz2),
+#           triple_integral((vy2 - u12[1]) * f21 * np.log(f2), vx2, vy2, vz2),
+#           triple_integral((vz2 - u12[2]) * f21 * np.log(f2), vx2, vy2, vz2)])
+#       vsqf21logf2 = triple_integral(vsq2 * f21 * np.log(f2), vx2, vy2, vz2)
+#           
 
-        # derivatives
-        du12 = ((n1 * n2 * m1 * m2) / (n1 * m1 * tau_ratio + n2 * m2)**2 *
-                (u1 - u2))
-        dT12 = (1. / (3. * tau_ratio * n1 + 3. * n2)**2 * 
-                (9. * n1 * n2 * (T1 - T2) +
-                 3. * n1 * n2 * (m1 * np.sum(u1**2 - u12**2) -
-                                 m2 * np.sum(u2**2 - u12**2))) - 
-                (2. * m1 * m2 * n1 * n2 * (tau_ratio * m1 * n1 * 
-                 np.sum(u1**2 - u1 * u2) + m2 * n2 * np.sum(u1 * u2 - u2**2))) /
-                ((3. * tau_ratio * n1 + 3. * n2) * (tau_ratio * m1 * n1 +
-                 m2 * n2)**2))
-        dA12 = (-3. * n1 / 2. * (m1 / (2. * np.pi))**(3./2.) *
-                T12**(-5./2.) * dT12)
-        dA21 = (-3. * n2 / 2. * (m2 / (2. * np.pi))**(3./2.) *
-                T12**(-5./2.) * dT12)
-        dtau12 = (dH21_bgk * ((dH12_bgk * dHdt21 * tau_ratio)**2 - 
-                   2 * tau_ratio * dH12_bgk * dH21_bgk * dHdt12 * dHdt21 - 
-                   (dH21_bgk * dHdt12)**2) /
-                  (dHdt21 * tau_ratio**2 * ((dH12_bgk * dHdt21 * tau_ratio)**2 + 
-                   2 * tau_ratio * dH12_bgk * dH21_bgk * dHdt12 * dHdt21 +
-                   (dH21_bgk * dHdt12)**2)))
-        dH12 = (f12logf1 * dA12 / A12 +
-                    np.sum(vf12logf1 * m1 / T12 * du12) +
-                    vsqf12logf1 * m1 / (2. * T12**2) * dT12)
-        dH21 = (f21logf2 * dA21 / A21 +
-                    np.sum(vf21logf2 * m2 / T12 * du12) +
-                    vsqf21logf2 * m2 / (2. * T12**2) * dT12)
-        dH12dt_bgk = f12logf1 - f1logf1
-        dH21dt_bgk = f21logf2 - f2logf2
-        dG1 = (1. / tau12**2 * dH12dt_bgk / dHdt12 * dtau12 -
-               1. / (tau12 * dHdt12) * dH12)
-        dG2 = ((1. / (tau_ratio**2 * tau12) +
-                1. / (tau_ratio * tau12**2) * dtau12) * dH21dt_bgk / dHdt21 - 
-               1. / (tau_ratio * tau12 * dHdt21) * dH21)
-        dG = np.array([dG1, dG2]).reshape((2,1))
-        return dG
-    
-    logging.debug('doing least squares optimization')
-    output = scipy.optimize.least_squares(residual, tau_ratio0, #jac=jacobian,
-                                          bounds=(0.01, 100), #bounds=(0, float('inf')), 
-                                          ftol=1e-6, xtol=1e-6, gtol=1e-6)
-    tau_ratio = output.x[0]
-    tau_ratio = 1;
+#       # derivatives
+#       du12 = ((n1 * n2 * m1 * m2) / (n1 * m1 * tau_ratio + n2 * m2)**2 *
+#               (u1 - u2))
+#       dT12 = (1. / (3. * tau_ratio * n1 + 3. * n2)**2 * 
+#               (9. * n1 * n2 * (T1 - T2) +
+#                3. * n1 * n2 * (m1 * np.sum(u1**2 - u12**2) -
+#                                m2 * np.sum(u2**2 - u12**2))) - 
+#               (2. * m1 * m2 * n1 * n2 * (tau_ratio * m1 * n1 * 
+#                np.sum(u1**2 - u1 * u2) + m2 * n2 * np.sum(u1 * u2 - u2**2))) /
+#               ((3. * tau_ratio * n1 + 3. * n2) * (tau_ratio * m1 * n1 +
+#                m2 * n2)**2))
+#       dA12 = (-3. * n1 / 2. * (m1 / (2. * np.pi))**(3./2.) *
+#               T12**(-5./2.) * dT12)
+#       dA21 = (-3. * n2 / 2. * (m2 / (2. * np.pi))**(3./2.) *
+#               T12**(-5./2.) * dT12)
+#       dtau12 = (dH21_bgk * ((dH12_bgk * dHdt21 * tau_ratio)**2 - 
+#                  2 * tau_ratio * dH12_bgk * dH21_bgk * dHdt12 * dHdt21 - 
+#                  (dH21_bgk * dHdt12)**2) /
+#                 (dHdt21 * tau_ratio**2 * ((dH12_bgk * dHdt21 * tau_ratio)**2 + 
+#                  2 * tau_ratio * dH12_bgk * dH21_bgk * dHdt12 * dHdt21 +
+#                  (dH21_bgk * dHdt12)**2)))
+#       dH12 = (f12logf1 * dA12 / A12 +
+#                   np.sum(vf12logf1 * m1 / T12 * du12) +
+#                   vsqf12logf1 * m1 / (2. * T12**2) * dT12)
+#       dH21 = (f21logf2 * dA21 / A21 +
+#                   np.sum(vf21logf2 * m2 / T12 * du12) +
+#                   vsqf21logf2 * m2 / (2. * T12**2) * dT12)
+#       dH12dt_bgk = f12logf1 - f1logf1
+#       dH21dt_bgk = f21logf2 - f2logf2
+#       dG1 = (1. / tau12**2 * dH12dt_bgk / dHdt12 * dtau12 -
+#              1. / (tau12 * dHdt12) * dH12)
+#       dG2 = ((1. / (tau_ratio**2 * tau12) +
+#               1. / (tau_ratio * tau12**2) * dtau12) * dH21dt_bgk / dHdt21 - 
+#              1. / (tau_ratio * tau12 * dHdt21) * dH21)
+#       dG = np.array([dG1, dG2]).reshape((2,1))
+#       return dG
+#   
+#   logging.debug('doing least squares optimization')
+#   temperature_tau_ratio = n2 / n1
+#   momentum_tau_ratio = (m2 * n2) / (m1 * n1)
+#   lb = min(temperature_tau_ratio, momentum_tau_ratio)
+#   ub = max(temperature_tau_ratio, momentum_tau_ratio)
+#   output = scipy.optimize.least_squares(residual, tau_ratio0, #jac=jacobian,
+#                                         bounds=(lb, ub),
+#                                         ftol=1e-6, xtol=1e-6, gtol=1e-6)
+#   tau_ratio = output.x[0]
+
     # mixture quantitities
     f12, f21, u12, T12 = distributions.equilibrium_maxwellian3D(
             n1, n2, u1, u2, T1, T2, m1, m2, vx1, vy1, vz1, vx2, vy2, vz2,
