@@ -15,9 +15,11 @@ n_vel : 100
 order : 1
 implicit : False
 timestep_bgk : 1e-15
-final_time : 7.5e-13
-tau_update_rate : 50
+final_time : 1.5e-12
+tau_update_rate : 100
 data_rate_bgk : 1
+run_to_completion_tol : 1e-6
+rhs_tol_bgk : 0.9
 bgk_path : /home/BGKMD/BGK2.0/MultiBGK/
 
 # MD simulation parameters

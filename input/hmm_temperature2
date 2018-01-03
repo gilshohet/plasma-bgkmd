@@ -1,5 +1,7 @@
 # material parameters
-testcase : hmm_basic_test
+testcase : hmm_temperature2
+only_md : False
+resample : True
 n_species : 2
 mass : 1.6726219e-24, 4.5129913e-23
 charge : 1.0, 11.5355
@@ -13,25 +15,25 @@ n_vel : 100
 order : 1
 implicit : False
 timestep_bgk : 1e-15
-final_time : 1e-14
-tau_update_rate : 5
+final_time : 5.0e-13
+tau_update_rate : 500
 data_rate_bgk : 1
-run_to_completion_tol : 0.1
-rhs_tol_bgk : 0.1
+run_to_completion_tol : 0.01
+rhs_tol_bgk : 0.001
 bgk_path : /home/BGKMD/BGK2.0/MultiBGK/
 
 # MD simulation parameters
-timestep_md : 0.001
-n_timesteps_md : 10
-max_timesteps_md : 50
+timestep_md : 0.0005
+n_timesteps_md : 1
+max_timesteps_md : 1
+md_save_rate : 2000
 friction : 0.5, 0.1
 equilibration_time : 0.01, 0.01
-small_box_equilibration : 0.1
+small_box_equilibration : 0.01
 n_simulations_md : 1
 cell_length_md : 18
 cutoff_md : 8
-movie_rate : 5
+movie_rate : 8000
 mts_cutoff_md : 0.5
 mts_threshold_md : 1e-5
 mts_timesteps_md : 100
-md_save_rate : 5

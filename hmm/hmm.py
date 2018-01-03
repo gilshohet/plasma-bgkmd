@@ -13,6 +13,7 @@ import md
 import md_io
 import bgk_io
 import tau_utils
+import tau_helpers
 import distributions
 import moments
 import units
@@ -73,7 +74,11 @@ class simulation(object):
     cell_length_bgk : float
         length of bgk simulation cell in cm (if 1D, otherwise this is ignored)
     tau_update_rate : int
-        how many bgk steps to take between updates to the taus
+        max number of bgk steps to take between updates to the taus
+    run_to_completion_tol : float
+        tolerance for ||f_eq-f||/||f_eq|| to run to completion
+    rhs_tol_bgk : float
+        tolerance for when to send it back to MD from BGK
     data_rate_bgk : int
         how often to write data to file in the bgk simulations
     bgk_path : string
@@ -129,6 +134,8 @@ class simulation(object):
         the current distribution of each species
     taus : n_species x n_species float array
         current relaxation times
+    tau_times : float array
+        times that we computed new taus
     tau_hist : list of n_species x n_species arrays
         time history of the taus every time we compute them
     tau_error_hist : list of n_species x n_species arrays
@@ -337,6 +344,26 @@ class simulation(object):
             err = 'missing parameter \'tau_update_rate\''
             if self.only_md:
                 tau_update_rate = 0
+            else:
+                raise KeyError(err)
+
+        try:
+            self.run_to_completion_tol = float(param_dict['run_to_completion_tol'])
+            logging.debug('tolerance to run to completion %f' % self.run_to_completion_tol)
+        except KeyError:
+            err = 'missing parameter \'run_to_completion_tol\''
+            if self.only_md:
+                self.run_to_completion_tol = 0
+            else:
+                raise KeyError(err)
+
+        try:
+            self.rhs_tol_bgk = float(param_dict['rhs_tol_bgk'])
+            logging.debug('tolerance for BGK to stop %f' % self.rhs_tol_bgk)
+        except KeyError:
+            err = 'missing parameter \'rhs_tol_bgk\''
+            if self.only_md:
+                self.rhs_tol_bgk = 0
             else:
                 raise KeyError(err)
 
@@ -606,18 +633,21 @@ class simulation(object):
                 self.distribution[cell,sp] = \
                        distributions.linear_interpolated_rv_3D(vx, vy, vz, f, m)
 
-        # initialize taus and errors
+        # initialize taus, errors, and equilibrium functions
         logging.debug('intializing other data variables')
         if self.only_md:
-            n_bgks = 0
+            self.n_bgks = 0
         else:
-            n_bgks = int(np.rint(self.final_time / (self.timestep_bgk * 
+            self.n_bgks = int(np.rint(self.final_time / (self.timestep_bgk * 
                                                     self.tau_update_rate)))
-        self.tau_hist = np.empty((n_bgks, self.n_cells_bgk, self.n_species,
+        self.tau_times = np.empty(self.n_bgks)
+        self.tau_hist = np.empty((self.n_bgks, self.n_cells_bgk, self.n_species,
                                   self.n_species))
-        self.tau_error_hist = np.empty((n_bgks, self.n_cells_bgk,
+        self.tau_error_hist = np.empty((self.n_bgks, self.n_cells_bgk,
                                         self.n_species, self.n_species))
         self.taus = np.empty((self.n_cells_bgk, self.n_species, self.n_species))
+        self.f_eq = np.empty((self.n_cells_bgk, self.n_species, self.n_species),
+                             dtype=object)
 
         # initialize macro properties
         self.density = np.empty(self.initial_density.shape)
@@ -748,7 +778,14 @@ class simulation(object):
                 logging.debug('std: \n' + np.array_str(std))
                 logging.debug('lower bound: \n' + np.array_str(lb)) 
                 logging.debug('upper bound: \n' + np.array_str(ub)) 
-                if np.any(lb * ub < 0):
+                extend = False
+                for sp1 in range(self.n_species):
+                    for sp2 in range(self.n_species):
+                        if sp1 == sp2:
+                            continue
+                        if lb[sp1,sp2] * ub[sp1,sp2] < 0:
+                            extend = True
+                if extend:
                     md_params.n_timesteps += self.md_save_rate
                     energy, data = md_io.simulate_md(
                         md_params, self.distribution[cell,:], md,
@@ -777,10 +814,12 @@ class simulation(object):
             dHdt = data.dHdt.mean(axis=(0,1))
             logging.debug('dHdt for the species is \n' + np.array_str(dHdt))
             (self.taus[cell,:,:],
-             self.tau_error_hist[self.bgk_counter,cell,:,:]) = \
+             self.tau_error_hist[self.bgk_counter,cell,:,:],
+             self.f_eq[cell,:,:]) = \
                     tau_utils.compute_taus(md_params, self.distribution[cell,:],
                                            dHdt)
             self.taus /= units.s
+            self.tau_times[self.bgk_counter] = self.current_time / units.s
             self.tau_hist[self.bgk_counter,:,:,:] = self.taus
             logging.debug('taus are: \n' + np.array_str(self.taus))
 
@@ -794,17 +833,42 @@ class simulation(object):
 
         logging.info('Running BGK simulation %d at time %f' %
                      (self.bgk_counter, self.current_time))
+
+        # check ||f_eq - f|| / ||f_eq|| to determine whether done
+        run_to_completion = True
+        for cell in range(self.n_cells_bgk):
+            for sp1 in range(self.n_species):
+                for sp2 in range(self.n_species):
+                    if self.f_eq[cell,sp1,sp2] is None:
+                        continue
+                    num_integrand = (self.f_eq[cell,sp1,sp2] -
+                                     self.distribution[cell,sp1].distribution)**2
+                    den_integrand = self.f_eq[cell,sp1,sp2]**2
+                    (vx, vy, vz) = (self.distribution[cell,sp1]._x,
+                                    self.distribution[cell,sp1]._y, 
+                                    self.distribution[cell,sp1]._z) 
+                    num_sq = tau_helpers.triple_integral(num_integrand, vx, vy, vz)
+                    den_sq = tau_helpers.triple_integral(den_integrand, vx, vy, vz)
+                    logging.debug('species 1: %d, species 2: %d, norm metric: %f' %
+                                  (sp1, sp2, np.sqrt(num_sq/den_sq)))
+                    if np.sqrt(num_sq) / np.sqrt(den_sq) > self.run_to_completion_tol:
+                        run_to_completion = False
+        logging.debug('run_to_completion: %d' % (run_to_completion))
+
+
         # set the parameters
         logging.debug('setting bgk parameters')
         bgk_params = bgk_io.bgk_parameters(
                 case=self.testcase, n_dims=self.n_dim,
                 length=self.cell_length_bgk, n_cells=self.n_cells_bgk,
                 n_vel=self.n_vel, timestep=self.timestep_bgk,
-                final_time=self.timestep_bgk*self.tau_update_rate,
+                current_time=self.current_time,
+                run_time=self.timestep_bgk*self.tau_update_rate,
                 order=self.order, implicit=self.implicit,
                 data_rate=self.data_rate_bgk, n_species=self.n_species,
                 charge=self.charge, distribution=self.distribution,
-                taus=self.taus, bgk_path=self.bgk_path)
+                taus=self.taus, run_to_completion=run_to_completion,
+                rhs_tol=self.rhs_tol_bgk, bgk_path=self.bgk_path)
 
         # run the simulation
         bgk_io.run_bgk_simulation(bgk_params)
@@ -812,7 +876,11 @@ class simulation(object):
         # load the distributions
         logging.info('Loading output data from the BGK simulation\n')
         if self.n_dim is 0:
-            self.distribution[0,:] = bgk_io.read_distributions0D(bgk_params)
+            self.distribution[0,:], self.current_time = \
+                    bgk_io.read_distributions0D(bgk_params)
+
+        if run_to_completion:
+            self.done_flag = True
 
     
     def update_conditions(self):
@@ -827,10 +895,6 @@ class simulation(object):
                         self.distribution[cell,sp].momentum[0] / self.mass[sp]
                 self.kinetic_energy[cell,sp] = \
                         self.distribution[cell,sp].kinetic_energy
-
-        # update time
-        self.current_time += self.timestep_bgk * self.tau_update_rate
-        self.bgk_counter += 1
 
 
     def march_simulation(self):
@@ -859,8 +923,26 @@ class simulation(object):
         '''
 
         # loop over time
-        while self.current_time < self.final_time - self.timestep_bgk*0.01:
+        self.done_flag = False
+        while (self.current_time < self.final_time - self.timestep_bgk*0.01 and
+               not self.done_flag):
+            # resize data structures if needed
+            if self.bgk_counter >= self.n_bgks:
+                self.n_bgks += max(1, int(np.rint((self.final_time - self.current_time) /
+                                       (self.timestep_bgk * self.tau_update_rate))))
+                self.tau_times.resize(self.n_bgks)
+                self.tau_hist.resize((self.n_bgks, self.n_cells_bgk, self.n_species,
+                                      self.n_species))
+                self.tau_error_hist.resize((self.n_bgks, self.n_cells_bgk,
+                                            self.n_species, self.n_species))
             self.march_simulation()
+            self.bgk_counter += 1
+
+        # write taus to file
+        np.save('tau_times', self.tau_times)
+        np.save('tau_history', self.tau_hist)
+        np.save('tau_errors', self.tau_error_hist)
+
 
     def run_md(self):
         ''' run just an MD simulation, basically a wrapper for

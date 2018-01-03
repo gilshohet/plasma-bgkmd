@@ -91,34 +91,42 @@ def compute_taus(params, distribution, dHdt):
     -------
     taus : n_species x n_species numpy array of floats
         all of the intra- and inter-species relaxation timescales
+    err : n_species x n_species numpy array of floats
+        the error in dHdt due to choice of tau
+    f_eq : n_species x n_species numpy array of distributions
+        the equilibrium distriubtions for relaxation
     '''
     
     taus = np.empty((params.n_species, params.n_species))
     error = np.zeros((params.n_species, params.n_species))
+    f_eq = np.empty((params.n_species, params.n_species), dtype=object)
 
     # first compute the intraspecies taus
     for sp in range(params.n_species):
-        taus[sp,sp] = tau_helpers.compute_intraspecies_tau(distribution[sp],
-                                                           dHdt[sp,sp])
+        taus[sp,sp], f_eq[sp,sp] = tau_helpers.compute_intraspecies_tau(
+                distribution[sp], dHdt[sp,sp])
 
     # now loop over species pairs to compute interspecies taus
     for sp1 in range(params.n_species):
         for sp2 in range(sp1+1, params.n_species):
-            tau12, tau21, err = tau_helpers.compute_interspecies_tau(
+            tau12, tau21, err, f12, f21 = tau_helpers.compute_interspecies_tau(
                     distribution[sp1], distribution[sp2], dHdt[sp1,sp2],
                     dHdt[sp2,sp1])
             taus[sp1,sp2] = tau12
             taus[sp2,sp1] = tau21
             error[sp1,sp2] = err[0]
             error[sp2,sp1] = err[1]
+            f_eq[sp1,sp2] = f12
+            f_eq[sp2,sp1] = f21
 
     # if intraspecies taus essentially zero, use analytical form
     analytical_taus = temperature_relaxation_taus(params)
     logging.debug('temperature relaxation taus are:\n' + np.array_str(analytical_taus))
     logging.debug('computed taus from md are:\n' + np.array_str(taus))
     for sp in range(params.n_species):
-        if taus[sp,sp] / analytical_taus[sp,sp] < 1e-2:
+        if taus[sp,sp] / analytical_taus[sp,sp] < 5e-2:
             taus[sp,sp] = analytical_taus[sp,sp]
+            f_eq[sp,sp] = None
             logging.debug('using analytical taus for species %d' % (sp))
 
     # if taus are the wrong sign, use analytical form
@@ -126,11 +134,11 @@ def compute_taus(params, distribution, dHdt):
         for sp2 in range(params.n_species):
             if taus[sp1, sp2] < 0:
                 taus[sp1,sp2] = analytical_taus[sp1,sp2]
-
+                f_eq[sp1,sp2] = None
                 logging.debug('negative taus detected. using analytical taus' +
                               ' for species pair (%d,%d)' % (sp1, sp2))
 
-    return taus, error
+    return taus, error, f_eq
 
 
 def momentum_transfer_tau(params):

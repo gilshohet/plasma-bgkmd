@@ -44,6 +44,8 @@ def compute_intraspecies_tau(distribution, dHdt):
     -------
     tau : float
         single species relaxation parameter tau_kk
+    f_eq : distribution
+        equilibrium distribution relaxing towards
     '''
 
     # extract information
@@ -60,7 +62,7 @@ def compute_intraspecies_tau(distribution, dHdt):
     # integrate and compute tau
     tau = triple_integral((f_eq - f) * np.log(f), vx, vy, vz) / dHdt
 
-    return tau
+    return tau, f_eq
 
 def compute_interspecies_tau(distribution1, distribution2, dHdt12, dHdt21):
     ''' compute the interspecies relaxation parameters by a nonlinear least
@@ -78,6 +80,10 @@ def compute_interspecies_tau(distribution1, distribution2, dHdt12, dHdt21):
     -------
     tau12, tau21 : floats
         relaxation time of species 1 due to species 2 and vice-versa
+    error : array to two floats
+        error from the taus
+    f12, f21 : distributions
+        interspecies equilibrium distributions being relaxed towards
 
     @TODO Fix analytical jacobian at some point
     '''
@@ -102,6 +108,7 @@ def compute_interspecies_tau(distribution1, distribution2, dHdt12, dHdt21):
     
     # initial guess for tau ratio, assume temperature relaxation
     tau_ratio0 = n2 / n1
+    tau_ratio = tau_ratio0
 
 #   # mixture quantitities
 #   f12, f21, u12, T12 = distributions.equilibrium_maxwellian3D(
@@ -236,8 +243,8 @@ def compute_interspecies_tau(distribution1, distribution2, dHdt12, dHdt21):
     tau12 = ((dHdt12 * dH12_bgk + tau_ratio * dHdt21 * dH21_bgk) / 
               (dHdt12**2 + dHdt21**2))
     tau21 = tau_ratio * tau12
-    error = abs(output.fun)# / np.array([dHdt12, dHdt21]))
-    logging.debug('least squares terminated due to: ' + output.message)
+    error = [-1.0, -1.0]#abs(output.fun)# / np.array([dHdt12, dHdt21]))
+#   logging.debug('least squares terminated due to: ' + output.message)
 
-    return tau12, tau21, error
+    return tau12, tau21, error, f12, f21
 

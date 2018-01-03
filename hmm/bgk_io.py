@@ -31,7 +31,9 @@ class bgk_parameters(object):
         number of velocity points in each direction (total is Nv**3)
     timestep : float
         time step (in seconds)
-    final_time : float
+    current_time : float
+        current time 
+    run_time : float
         length of time to simulate (in seconds)
     order : int, 1 or 2
         order of accuracy, 1 for first-order, 2 for second-order
@@ -47,14 +49,19 @@ class bgk_parameters(object):
         charge number (Z) of each species (charge = Z * e)
     distribution : list of distribution objects
         the discrete distribution associated with each species
+    taus : n_species x n_species numpy array
+        the interspecies and intraspecies taus
+    run_to_completion : boolean
+        whether to use the 2-norm-based stopping condition
     bgk_path : string
         path to the BGK program root folder
     '''
 
     def __init__ (self, case='test', n_dims=0, length=0, n_cells=1, n_vel=100,
-                  timestep=1.0e-14, final_time=2.0e-11, order=1,
+                  timestep=1.0e-14, current_time=0.0, run_time=2.0e-11, order=1,
                   implicit=False, data_rate=1, n_species=1, charge=[1.0],
-                  distribution=None, taus=None, bgk_path='.'):
+                  distribution=None, taus=None, run_to_completion=True,
+                  rhs_tol=1.0, bgk_path='.'):
         if distribution is None:
             raise ValueError('Need to specify the distributions at a minimum.')
         self.case = case
@@ -63,7 +70,8 @@ class bgk_parameters(object):
         self.n_cells = n_cells
         self.n_vel = n_vel
         self.timestep = timestep
-        self.final_time = final_time
+        self.current_time = current_time
+        self.run_time = run_time
         self.order = order
         self.implicit = implicit
         self.data_rate = data_rate
@@ -72,6 +80,8 @@ class bgk_parameters(object):
         self.distribution = distribution
         self.mass = np.empty(n_species)
         self.taus = taus
+        self.rhs_tol = rhs_tol
+        self.run_to_completion = run_to_completion
         for sp in range(n_species):
             self.mass[sp] = (distribution[0,sp].mass / units.g)
         if not bgk_path.endswith('/'):
@@ -104,7 +114,7 @@ class bgk_data(object):
         '''
 
         # initialize
-        n_saves = int(params.final_time / params.timestep / 
+        n_saves = int(params.run_time / params.timestep / 
                       params.data_rate + 1)
         self.time = params.timestep * params.data_rate * np.arange(n_saves)
         self.x_velocity = np.empty((n_saves, params.n_species, 3))
@@ -156,7 +166,7 @@ def write_bgk_parameters(params):
         f.write('%.8E\n' % (params.timestep))
         f.write('\n')
         f.write('Final_time\n')
-        f.write('%.8E\n' % (params.final_time))
+        f.write('%.8E\n' % (params.current_time + params.run_time))
         f.write('\n')
         f.write('Space_order\n')
         f.write('%d\n' % (params.order))
@@ -177,6 +187,9 @@ def write_bgk_parameters(params):
         f.write('Z\n')
         for charge in params.charge:
             f.write('%.8E\n' % (charge))
+        f.write('\n')
+        f.write('RHS_tol\n')
+        f.write('%.8E\n' % (params.rhs_tol))
         f.write('\n')
 
         # other stuff for initializing the simulation
@@ -227,6 +240,8 @@ def read_distributions0D(params):
     -------
     distribution : array of distribution objects
         distribution for each species
+    time : float
+        current simulation time (in seconds)
     '''
 
     distribution = []
@@ -244,9 +259,10 @@ def read_distributions0D(params):
             dist = distributions.linear_interpolated_rv_3D(vx, vy, vz, dist,
                                                            mass)
             distribution.append(dist)
+        time = float(f.readline())
 
     distribution = np.array(distribution, dtype=object)
-    return distribution.reshape((params.n_cells, params.n_species))
+    return distribution.reshape((params.n_cells, params.n_species)), time
 
 
 def write_distributions0D(params):
@@ -264,6 +280,7 @@ def write_distributions0D(params):
         for sp in range(params.n_species):
             f.write('%d %d %.5E\n' % (sp, params.n_vel,
                     params.distribution[0,sp]._x[-1] * units.s / units.cm))
+        f.write('%.8E' % params.current_time)
     # then write the distributions
     path = params.bgk_path + 'Data/' + params.case
     for sp in range(params.n_species):
@@ -313,6 +330,11 @@ def run_bgk_simulation(params):
         tau_flag = 1
     else:
         tau_flag = 0
+
+    if params.run_to_completion:
+        restart_flag = 2
+    else:
+        restart_flag = 4
     
     # go to BGK directory
     start_path = os.getcwd()
@@ -320,7 +342,8 @@ def run_bgk_simulation(params):
     
     # run the simulation
     try:
-        subprocess.check_call(['exec/MultiBGK_ ' +  params.case + ' 2 ' +
+        subprocess.check_call(['exec/MultiBGK_ ' +  params.case + ' ' + 
+                               str(restart_flag) + ' ' +
                                str(tau_flag)], shell=True)
     except:
         os.chdir(start_path)
