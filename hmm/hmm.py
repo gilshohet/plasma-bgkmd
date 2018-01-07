@@ -768,10 +768,14 @@ class simulation(object):
                                              print_rate=100,
                                              save_rate=self.md_save_rate)
             # check the dHdt
-            timesteps_elapsed = self.n_timesteps_md
-            while timesteps_elapsed < self.max_timesteps_md:
-                mean = data.dHdt[0].mean(axis=0)
-                std = data.dHdt[0].std(axis=0, ddof=1)
+#           timesteps_elapsed = self.n_timesteps_md
+#           while timesteps_elapsed < self.max_timesteps_md:
+#               mean = data.dHdt[0].mean(axis=0)
+#               std = data.dHdt[0].std(axis=0, ddof=1)
+            extend = True
+            while extend
+                mean = data.dHdt.mean(axis=(0,1))
+                std = data.dHdt.std(axis=(0,1), ddof=1)
                 (lb, ub) = stats.norm.interval(
                     0.95, loc=mean, scale=std/np.sqrt(timesteps_elapsed))
                 logging.debug('mean: \n' + np.array_str(mean))
@@ -785,14 +789,26 @@ class simulation(object):
                             continue
                         if lb[sp1,sp2] * ub[sp1,sp2] < 0:
                             extend = True
+                            logging.info("extending the MD with another simulation")
+#               if extend:
+#                   md_params.n_timesteps += self.md_save_rate
+#                   energy, data = md_io.simulate_md(
+#                       md_params, self.distribution[cell,:], md,
+#                       print_rate=100, resample=False,
+#                       save_rate=self.md_save_rate,
+#                       resume=True, last_step=timesteps_elapsed)
+#                   timesteps_elapsed += self.md_save_rate
                 if extend:
-                    md_params.n_timesteps += self.md_save_rate
-                    energy, data = md_io.simulate_md(
-                        md_params, self.distribution[cell,:], md,
-                        print_rate=100, resample=False,
-                        save_rate=self.md_save_rate,
-                        resume=True, last_step=timesteps_elapsed)
-                    timesteps_elapsed += self.md_save_rate
+                    logging.info("doing another equilibration to decorrelate stuff")
+                    md_io.equilibrate_md(md_params, md, print_rate=100,
+                                         save_rate=self.md_save_rate)
+                    logging.info('running another md')
+                    md_params.n_sims += 1
+                    energy, data = md_io.simulate_md(md_params,
+                                                     self.distribution[cell,:], md,
+                                                     print_rate=100,
+                                                     save_rate=self.md_save_rate,
+                                                     current_sim=md_params.n_sims-1)
                 else:
                     break
 

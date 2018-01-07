@@ -742,7 +742,8 @@ def equilibrate_md(params, md, print_rate=10, save_rate=1000):
 
 def simulate_md(params, distribution, md, print_rate=10, resample=True,
                 atol=[1e-2, 1.5e-2, 2e-2], rtol=[1e-2, 1.5e-2, 2e-2, 2e-2],
-                refresh_rate=0, save_rate=1000, resume=False, last_step=0):
+                refresh_rate=0, save_rate=1000, resume=False, last_step=0,
+                current_sim=0):
     ''' run the specified number of md simulations for the desired number of
     time steps and collect data on energy, dHdt, and moments
 
@@ -773,6 +774,8 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
     last_step : int
         step to resume from
         0 -> not resuming
+    current_sim : int
+        current simulation (for adding sims)
 
     Returns
     -------
@@ -801,7 +804,7 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
         log_counter = 1
 
     # loop over simulations
-    for sim in range(params.n_sims):
+    for sim in range(current_sim, params.n_sims):
         logging.info('---------------------------------------------------')
         logging.info('SIMULATION %d of %d' % (sim+1, params.n_sims))
         logging.info('---------------------------------------------------')
@@ -817,6 +820,16 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
         md.conservation()
         md.movie()
         md.naughtypair()
+        if current_sim > 0:
+            logging.info('reloading simulation data')
+            energy[:-1] = np.load('energy.npy')
+            data.dHdt[:-1] = np.load('data.dHdt.npy')
+            data.momentum[:-1] = np.load('data.momentum.npy')
+            data.stress[:-1] = np.load('data.stress.npy')
+            data.kinetic_energy[:-1] = np.load('data.kinetic_energy.npy')
+            data.heat[:-1] = np.load('data.heat.npy')
+            data.m4[:-1] = np.load('data.m4.npy')
+
         if not resume:
             energy[sim,0,:] = get_md_conservation(md)
             data.get_md_data(sim, 0, params, md, distribution)
