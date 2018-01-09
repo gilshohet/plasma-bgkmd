@@ -945,6 +945,13 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
                 distribution_log[sim,log_counter,:] = distribution
                 log_counter += 1
 
+            # do another equilibration bewteen simulations
+            if sim < params.n_sims-1:
+                logging.debug('equilibrating between MD simulations')
+                equilibrate_md(params, md, print_rate=500, save_rate=save_rate)
+                pos0, vel0 = get_md_phasespace(md)
+
+
     if refresh_rate > 0:
         return energy, data, distribution_log
     else:
