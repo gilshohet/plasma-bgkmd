@@ -39,10 +39,11 @@ class simulation(object):
         flag whether to just run an MD simulation instead of full HMM, don't
         need bgk parameters except for n_vel if this is on. tau_update_rate is
         optional and will set the distribution refresh rate in MD.
-    smart_tau : 4 value float array or None
+    smart_tau : 5 value float array or None
         if None, update tau based only on rhs_tol_bgk
-        else [window_size, tau_tol, window_tol, f_tol]
+        else [window_size, window_steps, tau_tol, window_tol, f_tol]
         window_size : how many points to use for linear fit
+        window_steps : how many steps to take between window samples initially
         tau_tol : how much extrpolation can deviate from last tau before MD
         window_tol : max extrapolation time relative to width of window
         f_tol : how much f can deviate before MD (least squares sense)
@@ -314,7 +315,7 @@ class simulation(object):
 
         try:
             self.timestep_bgk = float(param_dict['timestep_bgk'])
-            logging.debug('bgk time step: %f seconds' % self.timestep_bgk)
+            logging.debug('bgk time step: %.3e seconds' % self.timestep_bgk)
         except KeyError:
             err = 'missing parameter \'timestep_bgk\''
             if not self.only_md:
@@ -322,7 +323,7 @@ class simulation(object):
 
         try:
             self.final_time = float(param_dict['final_time'])
-            logging.debug('final simulation time: %f seconds' %
+            logging.debug('final simulation time: %.3e seconds' %
                           self.final_time)
         except KeyError:
             err = 'missing parameter \'final_time\''
@@ -343,7 +344,7 @@ class simulation(object):
         if self.n_dim is 1:
             try:
                 self.cell_length_bgk = float(param_dict['cell_length_bgk'])
-                logging.debug('bgk cell length is: %f' % self.cell_length_bgk)
+                logging.debug('bgk cell length is: %.3e' % self.cell_length_bgk)
             except KeyError:
                 err = 'missing parameter \'cell_length_bgk\''
                 raise KeyError(err)
@@ -490,7 +491,7 @@ class simulation(object):
 
         try:
             self.mts_threshold_md = float(param_dict['mts_threshold_md'])
-            logging.debug('MTS energy jump threshold: %f' %
+            logging.debug('MTS energy jump threshold: %.3e' %
                           self.mts_threshold_md)
         except KeyError:
             logging.debug('missing key mts_threshold_md, defaulting to 100 ' +
@@ -685,15 +686,16 @@ class simulation(object):
 
         # adaptive tau stuff
         if self.smart_tau is not None:
-            self.window_size = self.smart_tau[0]
-            self.tau_tol = self.smart_tau[1]
-            self.window_tol = self.smart_tau[2]
-            self.f_tol = self.smart_tau[3]
+            self.window_size = int(self.smart_tau[0])
+            self.window_steps = int(self.smart_tau[1])
+            self.tau_tol = self.smart_tau[2]
+            self.window_tol = self.smart_tau[3]
+            self.f_tol = self.smart_tau[4]
             self.tau_counter = 0
 
             # set up for computing taus and recording
-            self.window_times = np.empty(window_size)
-            self.window_taus = np.empty((window_size, self.n_cells_bgk,
+            self.window_times = np.empty(self.window_size)
+            self.window_taus = np.empty((self.window_size, self.n_cells_bgk,
                                          self.n_species, self.n_species))
             self.smart_tau_times_f = open('smart_tau_times.dat', 'w')
             self.smart_taus_f = open('smart_taus.dat', 'w')
@@ -810,7 +812,7 @@ class simulation(object):
                 mean = data.dHdt.mean(axis=(0,1))
                 std = data.dHdt.std(axis=(0,1), ddof=1)
                 (lb, ub) = stats.norm.interval(
-                    0.95, loc=mean, scale=std/np.sqrt(self.n_timseteps_md*
+                    0.95, loc=mean, scale=std/np.sqrt(self.n_timesteps_md *
                                                       md_params.n_sims))
                 logging.debug('mean: \n' + np.array_str(mean))
                 logging.debug('std: \n' + np.array_str(std))
@@ -869,7 +871,7 @@ class simulation(object):
                     tau_utils.compute_taus(md_params, self.distribution[cell,:],
                                            dHdt)
             self.taus /= units.s
-            self.tau_times[self.bgk_counter] = self.current_time / units.s
+            self.tau_times[self.bgk_counter] = self.current_time
             self.tau_hist[self.bgk_counter,:,:,:] = self.taus
             logging.debug('taus are: \n' + np.array_str(self.taus))
 
@@ -877,10 +879,14 @@ class simulation(object):
             os.chdir(rootdir)
 
             # write taus to file
-            self.tau_times_f.write('%f\n' % (self.current_time / units.s))
+            logging.debug('writing taus to file')
+            logging.debug(np.array_repr(self.taus))
+            self.tau_times_f.write('%.8E\n' % (self.current_time))
+            self.tau_times_f.flush()
             self.tau_hist_f.write('np.' +
-                                  self.taus.array_repr().replace('\n', '*') +
+                                  np.array_repr(self.taus).replace('\n', '*') +
                                   '\n')
+            self.tau_hist_f.flush()
 
     def bgk_step(self, n_steps=0):
         '''run the bgk simulation with the md informed taus for the desired
@@ -907,7 +913,7 @@ class simulation(object):
                                     self.distribution[cell,sp1]._z) 
                     num_sq = tau_helpers.triple_integral(num_integrand, vx, vy, vz)
                     den_sq = tau_helpers.triple_integral(den_integrand, vx, vy, vz)
-                    logging.debug('species 1: %d, species 2: %d, norm metric: %f' %
+                    logging.debug('species 1: %d, species 2: %d, norm metric: %.4e' %
                                   (sp1, sp2, np.sqrt(num_sq/den_sq)))
                     if np.sqrt(num_sq) / np.sqrt(den_sq) > self.run_to_completion_tol:
                         run_to_completion = False
@@ -916,7 +922,7 @@ class simulation(object):
 
         # set the parameters
         logging.debug('setting bgk parameters')
-        if nsteps == 0 or run_to_completion:
+        if n_steps == 0 or run_to_completion:
             bgk_params = bgk_io.bgk_parameters(
                     case=self.testcase, n_dims=self.n_dim,
                     length=self.cell_length_bgk, n_cells=self.n_cells_bgk,
@@ -976,7 +982,7 @@ class simulation(object):
         3) update the simulation conditions with the bgk output
         '''
 
-        logging.info('marching simulation at time %.3f of %.3f\n' %
+        logging.info('marching simulation at time %.3e of %.3e\n' %
               (self.current_time, self.final_time))
         # run the MD simulations and get the taus
         self.taus_from_md()
@@ -997,38 +1003,72 @@ class simulation(object):
         4) repeat 2 and 3 until stopping condition
         '''
 
-        logging.info('smart marching simulation at time %.3f\n' %
+        logging.info('smart marching simulation at time %.3e\n' %
                      (self.current_time))
 
         # run the MD simulation and get taus
         self.taus_from_md()
 
         # update the window
-        if tau_counter < self.window_size:
-            self.window_times[tau_counter] = self.current_time
-            self.window_taus[tau_counter] = self.taus.copy()
-            tau_counter += 1
+        if self.tau_counter < self.window_size:
+            self.window_times[self.tau_counter] = self.current_time
+            self.window_taus[self.tau_counter] = self.taus.copy()
+            self.tau_counter += 1
         else:
             self.window_times = np.roll(self.window_times, -1)
             self.window_taus = np.roll(self.window_taus, -1, axis=0)
             self.window_times[-1] = self.current_time
             self.window_taus[-1] = self.taus.copy()
 
-        # run bgk normally if window not full, else steps with extrapolation
-        if tau_counter < self.window_size:
-            self.bgk_step()
-            logging.info('Updating simulation parameters with BGK output')
-            self.update_conditions()
+        # run bgk for window_steps if window not full, else extrapolation
+        if self.tau_counter < self.window_size:
+            if self.tau_counter == 1:
+                deg = 0
+            else:
+                deg = 1
+            # compute line fit for taus
+            tau_coeffs = np.empty(self.taus.shape, dtype=np.poly1d)
+            initial_taus = np.empty(self.taus.shape)
+            for cell in range(self.n_cells_bgk):
+                for sp1 in range(self.n_species):
+                    for sp2 in range(self.n_species):
+                        tau_coeffs[cell,sp1,sp2] = \
+                                np.poly1d(np.polyfit(self.window_times,
+                                                     self.window_taus[:,cell,sp1,sp2],
+                                                     deg))
+
+            # take window_steps steps with extrapolation
+            for i in range(self.window_steps):
+                # get new tau
+                for cell in range(self.n_cells_bgk):
+                    for sp1 in range(self.n_species):
+                        for sp2 in range(self.n_species):
+                            self.taus[cell,sp1,sp2] = \
+                                    tau_coeffs[cell,sp1,sp2](self.current_time)
+
+                # also write taus to file
+                logging.debug('writing taus to file')
+                logging.debug(np.array_repr(self.taus))
+                self.smart_tau_times_f.write('%.8E\n' % (self.current_time))
+                self.smart_tau_times_f.flush()
+                self.smart_taus_f.write('np.' +
+                                        np.array_repr(self.taus).replace('\n', '*') +
+                                        '\n')
+                self.smart_taus_f.flush()
+
+                # take step
+                self.bgk_step(n_steps=1)
+                self.update_conditions()
         else:
             # log initial state for checks
             initial_time = self.current_time
-            initial_distributions = np.empty(self.distribution.shape)
+            initial_distributions = np.empty(self.distribution.shape, dtype=object)
             for cell in range(self.n_cells_bgk):
                 for sp in range(self.n_species):
                     initial_distributions[cell,sp] = \
                             self.distribution[cell,sp].distribution.copy()
             initial_norms = np.empty(self.distribution.shape)
-            window_width = window_times[-1] - window_times[0]
+            window_width = self.window_times[-1] - self.window_times[0]
             for cell in range(self.n_cells_bgk):
                 for sp in range(self.n_species):
                     integrand = self.distribution[cell,sp].distribution**2
@@ -1044,22 +1084,19 @@ class simulation(object):
             for cell in range(self.n_cells_bgk):
                 for sp1 in range(self.n_species):
                     for sp2 in range(self.n_species):
-                        coeff = np.poly1d(np.polyfit(self.window_times,
-                                                     self.window_taus[:,cell,sp1,sp2],
-                                                     1))
                         tau_coeffs[cell,sp1,sp2] = \
                                 np.poly1d(np.polyfit(self.window_times,
                                                      self.window_taus[:,cell,sp1,sp2],
                                                      1))
                         initial_taus[cell,sp1,sp2] = \
-                                    self.tau_coeffs[cell,sp1,sp2](self.current_time)
+                                    tau_coeffs[cell,sp1,sp2](self.current_time)
 
             # take single steps until reach new MD condition
             while 1:
-                if self.current_time - initital_time > self.window_tol * window_width:
+                if self.current_time - initial_time > self.window_tol * window_width:
                     logging.info('need new md because of extrapolating past window limit')
                     break
-                if self.done_flag):
+                if self.done_flag:
                     logging.info('stopping because the simulation is done')
 
                 need_md = False
@@ -1076,20 +1113,20 @@ class simulation(object):
                         normsq = tau_helpers.triple_integral(integrand, vx, vy, vz)
                         norm = np.sqrt(normsq)
                         if norm/initial_norms[cell,sp1] > self.f_tol:
-                            logging.debug('need new md because species %d changed by %f' %
+                            logging.debug('need new md because species %d changed by %.4e' %
                                           (sp1, norm/initial_norms))
                             need_md=True
 
                         # new tau
                         for sp2 in range(self.n_species):
                             self.taus[cell,sp1,sp2] = \
-                                    self.tau_coeffs[cell,sp1,sp2](self.current_time)
+                                    tau_coeffs[cell,sp1,sp2](self.current_time)
 
                             delta = (np.abs(self.taus[cell,sp1,sp2] - 
                                             initial_taus[cell,sp1,sp2]) /
                                      initial_taus[cell,sp1,sp2])
                             if delta > self.tau_tol:
-                                logging.debug('need new md because tau %d,%d changed by %f' %
+                                logging.debug('need new md because tau %d,%d changed by %.4e' %
                                               (sp1, sp2, delta))
                                 need_md = True
 
@@ -1097,15 +1134,17 @@ class simulation(object):
                 if need_md:
                     break
 
+                # also write taus to file
+                logging.debug('writing taus to file')
+                logging.debug(np.array_repr(self.taus))
+                self.smart_tau_times_f.write('%.8E\n' % (self.current_time))
+                self.smart_taus_f.write('np.' +
+                                        np.array_repr(self.taus).replace('\n', '*') +
+                                        '\n')
+
                 # otherwise take one BGK step and update data
                 self.bgk_step(n_steps=1)
                 self.update_conditions()
-
-                # also write taus to file
-                self.smart_tau_times_f.write('%f\n' % (self.current_time / units.s))
-                self.smart_taus_f.write('np.' +
-                                        self.taus.array_repr().replace('\n', '*') +
-                                        '\n')
 
 
     def run_hmm(self):

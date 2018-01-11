@@ -793,7 +793,6 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
     prev_r = np.empty((3, params.n_particles))
     prev_v = np.empty((3, params.n_particles))
     prev_a = np.empty((3, params.n_particles))
-    pos0, vel0 = get_md_phasespace(md)
     if refresh_rate > 0:
         refresh_rate = int(refresh_rate)
         distribution_log = np.empty((params.n_sims,
@@ -811,6 +810,7 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
 
         # velocity resample if needed
         if resample and not resume:
+            pos0, vel0 = get_md_phasespace(md)
             vel = velocity_resample(distribution, params, atol, rtol)
             set_md_phasespace(pos0, vel, md)
 
@@ -911,7 +911,7 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
             data.get_md_data(sim, step, params, md, distribution)
 
             # save data every save_rate timesteps
-            if save_rate > 0 and step % save_rate == 0:
+            if (save_rate > 0 and step % save_rate == 0) or step==params.n_timesteps:
                 logging.debug('saving simulation data at time step %d' % step)
                 pos, vel = get_md_phasespace(md)
 
@@ -945,11 +945,15 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
                 distribution_log[sim,log_counter,:] = distribution
                 log_counter += 1
 
-            # do another equilibration bewteen simulations
-            if sim < params.n_sims-1:
-                logging.debug('equilibrating between MD simulations')
-                equilibrate_md(params, md, print_rate=500, save_rate=save_rate)
-                pos0, vel0 = get_md_phasespace(md)
+        # do another equilibration bewteen simulations
+        if sim < params.n_sims-1:
+            md.closefiles()
+            md.openfiles()
+            logging.debug('equilibrating between MD simulations')
+            equilibrate_md(params, md, print_rate=500, save_rate=save_rate)
+            md.parameters_mod.thermostaton = False
+            md.closefiles()
+            md.openfiles()
 
 
     if refresh_rate > 0:
