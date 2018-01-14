@@ -921,6 +921,7 @@ class simulation(object):
 
 
         # set the parameters
+        eps = 0.01*self.timestep_bgk
         logging.debug('setting bgk parameters')
         if n_steps == 0 or run_to_completion:
             bgk_params = bgk_io.bgk_parameters(
@@ -928,7 +929,7 @@ class simulation(object):
                     length=self.cell_length_bgk, n_cells=self.n_cells_bgk,
                     n_vel=self.n_vel, timestep=self.timestep_bgk,
                     current_time=self.current_time,
-                    run_time=self.timestep_bgk*self.tau_update_rate,
+                    run_time=self.timestep_bgk*self.tau_update_rate-eps,
                     order=self.order, implicit=self.implicit,
                     data_rate=self.data_rate_bgk, n_species=self.n_species,
                     charge=self.charge, distribution=self.distribution,
@@ -940,7 +941,7 @@ class simulation(object):
                     length=self.cell_length_bgk, n_cells=self.n_cells_bgk,
                     n_vel=self.n_vel, timestep=self.timestep_bgk,
                     current_time=self.current_time,
-                    run_time=self.timestep_bgk*n_steps,
+                    run_time=self.timestep_bgk*n_steps-eps,
                     order=self.order, implicit=self.implicit,
                     data_rate=self.data_rate_bgk, n_species=self.n_species,
                     charge=self.charge, distribution=self.distribution,
@@ -1033,8 +1034,9 @@ class simulation(object):
                 for sp1 in range(self.n_species):
                     for sp2 in range(self.n_species):
                         tau_coeffs[cell,sp1,sp2] = \
-                                np.poly1d(np.polyfit(self.window_times,
-                                                     self.window_taus[:,cell,sp1,sp2],
+                                np.poly1d(np.polyfit(
+                                    self.window_times[:self.tau_counter],
+                                    self.window_taus[:self.tau_counter,cell,sp1,sp2],
                                                      deg))
 
             # take window_steps steps with extrapolation
@@ -1114,7 +1116,7 @@ class simulation(object):
                         norm = np.sqrt(normsq)
                         if norm/initial_norms[cell,sp1] > self.f_tol:
                             logging.debug('need new md because species %d changed by %.4e' %
-                                          (sp1, norm/initial_norms))
+                                          (sp1, norm/initial_norms[cell,sp1]))
                             need_md=True
 
                         # new tau
@@ -1138,9 +1140,11 @@ class simulation(object):
                 logging.debug('writing taus to file')
                 logging.debug(np.array_repr(self.taus))
                 self.smart_tau_times_f.write('%.8E\n' % (self.current_time))
+                self.smart_tau_times_f.flush()
                 self.smart_taus_f.write('np.' +
                                         np.array_repr(self.taus).replace('\n', '*') +
                                         '\n')
+                self.smart_taus_f.flush()
 
                 # otherwise take one BGK step and update data
                 self.bgk_step(n_steps=1)

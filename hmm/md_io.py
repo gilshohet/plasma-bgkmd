@@ -790,6 +790,7 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
     energy = np.empty((params.n_sims, params.n_timesteps+1, 3))
     data = md_data(params)
     md.parameters_mod.thermostaton = False
+    pos0, vel0 = get_md_phasespace(md)
     prev_r = np.empty((3, params.n_particles))
     prev_v = np.empty((3, params.n_particles))
     prev_a = np.empty((3, params.n_particles))
@@ -810,7 +811,6 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
 
         # velocity resample if needed
         if resample and not resume:
-            pos0, vel0 = get_md_phasespace(md)
             vel = velocity_resample(distribution, params, atol, rtol)
             set_md_phasespace(pos0, vel, md)
 
@@ -950,7 +950,8 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
             md.closefiles()
             md.openfiles()
             logging.debug('equilibrating between MD simulations')
-            equilibrate_md(params, md, print_rate=500, save_rate=save_rate)
+            set_md_phasespace(pos0, vel0, md)
+            equilibrate_md(params, md, print_rate=200, save_rate=save_rate)
             md.parameters_mod.thermostaton = False
             md.closefiles()
             md.openfiles()
