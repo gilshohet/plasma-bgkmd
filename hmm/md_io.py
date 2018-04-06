@@ -960,7 +960,7 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
     if refresh_rate > 0:
         return energy, data, distribution_log
     else:
-        return energy, data
+        return energy, data, pos0, vel0
 
 
 def setup_md_workspace():

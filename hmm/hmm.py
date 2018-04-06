@@ -39,12 +39,13 @@ class simulation(object):
         flag whether to just run an MD simulation instead of full HMM, don't
         need bgk parameters except for n_vel if this is on. tau_update_rate is
         optional and will set the distribution refresh rate in MD.
-    smart_tau : 5 value float array or None
+    smart_tau : 6 value float array or None
         if None, update tau based only on rhs_tol_bgk
-        else [window_size, window_steps, tau_tol, window_tol, f_tol]
+        else [window_size, window_steps, self_tau_tol, cross_tau_tol, window_tol, f_tol]
         window_size : how many points to use for linear fit
         window_steps : how many steps to take between window samples initially
-        tau_tol : how much extrpolation can deviate from last tau before MD
+        self_tau_tol : how much self extrpolation can deviate from last tau before MD
+        cross_tau_tol : how much cross extrpolation can deviate from last tau before MD
         window_tol : max extrapolation time relative to width of window
         f_tol : how much f can deviate before MD (least squares sense)
 
@@ -111,6 +112,8 @@ class simulation(object):
         slowest plasma period, will not do this stage if 0
     n_simulations_md : int
         number of md simulations to run when for computation of dH/dt
+    max_simulations_md : int
+        max number of md simulations to run when for computation of dH/dt
     cell_length_md : float
         length of side of md cell as proportion of screening length
     cutoff_md : float
@@ -465,6 +468,13 @@ class simulation(object):
             raise KeyError(err)
 
         try:
+            self.max_simulations_md = int(param_dict['max_simulations_md'])
+            logging.debug('max md simulations per run: %d' % self.max_simulations_md)
+        except KeyError:
+            logging.debug('missing parameter \'max_simulations_md\', using n_simulations_md')
+            self.max_simulations_md = self.n_simulations_md
+
+        try:
             self.cell_length_md = float(param_dict['cell_length_md'])
             logging.debug('md cell length: %f screening lengths' %
                           self.cell_length_md)
@@ -688,9 +698,10 @@ class simulation(object):
         if self.smart_tau is not None:
             self.window_size = int(self.smart_tau[0])
             self.window_steps = int(self.smart_tau[1])
-            self.tau_tol = self.smart_tau[2]
-            self.window_tol = self.smart_tau[3]
-            self.f_tol = self.smart_tau[4]
+            self.self_tau_tol = self.smart_tau[2]
+            self.cross_tau_tol = self.smart_tau[3]
+            self.window_tol = self.smart_tau[4]
+            self.f_tol = self.smart_tau[5]
             self.tau_counter = 0
 
             # set up for computing taus and recording
@@ -798,10 +809,10 @@ class simulation(object):
             # run the simulations
             logging.debug('starting simulation phase')
             md.openfiles()
-            energy, data = md_io.simulate_md(md_params,
-                                             self.distribution[cell,:], md,
-                                             print_rate=100,
-                                             save_rate=self.md_save_rate)
+            energy, data, pos0, vel0 = md_io.simulate_md(md_params,
+                                                         self.distribution[cell,:], md,
+                                                         print_rate=100,
+                                                         save_rate=self.md_save_rate)
             # check the dHdt
 #           timesteps_elapsed = self.n_timesteps_md
 #           while timesteps_elapsed < self.max_timesteps_md:
@@ -826,6 +837,9 @@ class simulation(object):
                         if lb[sp1,sp2] * ub[sp1,sp2] < 0:
                             extend = True
                             logging.info("extending the MD with another simulation")
+                if md_params.n_sims == self.max_simulations_md:
+                    extend = False
+
 #               if extend:
 #                   md_params.n_timesteps += self.md_save_rate
 #                   energy, data = md_io.simulate_md(
@@ -836,15 +850,21 @@ class simulation(object):
 #                   timesteps_elapsed += self.md_save_rate
                 if extend:
                     logging.info("doing another equilibration to decorrelate stuff")
+                    md.closefiles()
+                    md.openfiles()
+                    md_io.set_md_phasespace(pos0, vel0, md)
                     md_io.equilibrate_md(md_params, md, print_rate=100,
                                          save_rate=self.md_save_rate)
+                    md.closefiles()
+                    md.openfiles()
                     logging.info('running another md')
                     md_params.n_sims += 1
-                    energy, data = md_io.simulate_md(md_params,
-                                                     self.distribution[cell,:], md,
-                                                     print_rate=100,
-                                                     save_rate=self.md_save_rate,
-                                                     current_sim=md_params.n_sims-1)
+                    energy, data, pos0, vel0 = md_io.simulate_md(
+                            md_params,
+                            self.distribution[cell,:], md,
+                            print_rate=200,
+                            save_rate=self.md_save_rate,
+                            current_sim=md_params.n_sims-1)
                 else:
                     break
 
@@ -1023,7 +1043,7 @@ class simulation(object):
 
         # run bgk for window_steps if window not full, else extrapolation
         if self.tau_counter < self.window_size:
-            if self.tau_counter == 1:
+            if self.tau_counter < 3:
                 deg = 0
             else:
                 deg = 1
@@ -1070,7 +1090,10 @@ class simulation(object):
                     initial_distributions[cell,sp] = \
                             self.distribution[cell,sp].distribution.copy()
             initial_norms = np.empty(self.distribution.shape)
-            window_width = self.window_times[-1] - self.window_times[0]
+            if self.window_size == 1:
+                window_width = float('inf')
+            else:
+                window_width = self.window_times[-1] - self.window_times[0]
             for cell in range(self.n_cells_bgk):
                 for sp in range(self.n_species):
                     integrand = self.distribution[cell,sp].distribution**2
@@ -1081,6 +1104,10 @@ class simulation(object):
                     initial_norms[cell,sp] = np.sqrt(integral_sq)
 
             # compute line fit for taus and get initial value
+            if self.window_size < 2:
+                deg = 0
+            else:
+                deg = 1
             tau_coeffs = np.empty(self.taus.shape, dtype=np.poly1d)
             initial_taus = np.empty(self.taus.shape)
             for cell in range(self.n_cells_bgk):
@@ -1089,17 +1116,18 @@ class simulation(object):
                         tau_coeffs[cell,sp1,sp2] = \
                                 np.poly1d(np.polyfit(self.window_times,
                                                      self.window_taus[:,cell,sp1,sp2],
-                                                     1))
+                                                     deg))
                         initial_taus[cell,sp1,sp2] = \
                                     tau_coeffs[cell,sp1,sp2](self.current_time)
 
             # take single steps until reach new MD condition
             while 1:
+                if self.done_flag:
+                    logging.info('stopping because the simulation is done')
+                    break
                 if self.current_time - initial_time > self.window_tol * window_width:
                     logging.info('need new md because of extrapolating past window limit')
                     break
-                if self.done_flag:
-                    logging.info('stopping because the simulation is done')
 
                 need_md = False
 
@@ -1127,7 +1155,8 @@ class simulation(object):
                             delta = (np.abs(self.taus[cell,sp1,sp2] - 
                                             initial_taus[cell,sp1,sp2]) /
                                      initial_taus[cell,sp1,sp2])
-                            if delta > self.tau_tol:
+                            if ((sp1 is sp2 and delta > self.self_tau_tol) or 
+                                (sp1 is not sp2 and delta > self.cross_tau_tol)):
                                 logging.debug('need new md because tau %d,%d changed by %.4e' %
                                               (sp1, sp2, delta))
                                 need_md = True
@@ -1302,7 +1331,7 @@ class simulation(object):
                     resume=self.md_resume,
                     last_step=self.md_last_step)
             else:
-                energy, data = md_io.simulate_md(
+                energy, data, pos0, vel0 = md_io.simulate_md(
                     md_params, self.distribution[cell,:], md, print_rate=100,
                     resample=self.md_resample,
                     refresh_rate=0,

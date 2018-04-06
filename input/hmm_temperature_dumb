@@ -1,5 +1,5 @@
 # material parameters
-testcase : hmm_temperature_regression
+testcase : hmm_temperature_no_regression
 only_md : False
 resample : True
 n_species : 2
@@ -10,7 +10,7 @@ initial_temperature : 1000, 500
 initial_velocity : 0, 0
 
 # tau regression
-smart_tau : 5, 5, 0.5, 0.1, 1.0, 0.05
+smart_tau : 1, -1, 100, 100, 100, 0.05
 
 # BGK simulation parameters
 n_dim : 0
