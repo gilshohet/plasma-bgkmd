@@ -752,134 +752,129 @@ class simulation(object):
             bulk_velocity = np.zeros((self.n_species,3))
             bulk_velocity[:,0] = self.velocity[cell,:]
 
-            # cell size depends on if doing small box equilibration first
-            if self.small_box_equilibration > 0:
-                cell_size = self.cell_length_md / 2.
-                cutoff = self.cutoff_md / 2.
-            else:
-                cell_size = params.cell_length_md
-                cutoff = params.cutoff_md
-
-            # set up md parameters with the current state
-            logging.debug('setting md parameters')
-            md_params = md_io.md_parameters(
-                    n_sims=self.n_simulations_md, cell_size=cell_size,
-                    n_timesteps=self.n_timesteps_md, timestep=self.timestep_md,
-                    movie_rate=self.movie_rate, n_species=self.n_species,
-                    density=self.density[cell,:], mass=self.mass,
-                    charge=self.charge, screen_length=screen_length,
-                    cutoff=cutoff, kinetic_energy=self.kinetic_energy[cell,:],
-                    bulk_velocity=bulk_velocity, friction=self.friction[0],
-                    n_mts_timesteps=self.mts_timesteps_md,
-                    mts_cutoff=self.mts_cutoff_md,
-                    mts_threshold=self.mts_threshold_md)
-                    
-            # equilibration phase
-            if self.small_box_equilibration > 0:
-                logging.debug('equilibrating on the small box')
-                # first equilibrate on a smaller box, if specified
-                md_params.equilibration_time = self.small_box_equilibration
-
-                # set the parameters and phase space
-                md_io.set_md_parameters(md_params, md)
-                species, pos0, vel0 = md_io.generate_md_phasespace(md_params)
-                md_io.set_md_phasespace(pos0, vel0, md)
-
-                # equilibration
-                md_io.equilibrate_md(md_params, md, print_rate=1000,
-                                     save_rate=self.md_save_rate)
-                pos1, vel1 = md_io.get_md_phasespace(md)
-
-                # expand the box and set up parameters
-                md_io.expand_md_box(md_params, md)
-
-            # first equilibration on full box
-            logging.debug('first full-size equilibration')
-            md_params.equilibration_time = self.equilibration_time[0]
-            md_io.equilibrate_md(md_params, md, print_rate=100,
-                                 save_rate=self.md_save_rate)
-
-            # second equilibration on full box
-            logging.debug('second full-size equilibration')
-            md_params.change_friction(self.friction[1], md)
-            md_io.equilibrate_md(md_params, md, print_rate=100,
-                                 save_rate=self.md_save_rate)
-            md.closefiles()
-    
-            # run the simulations
-            logging.debug('starting simulation phase')
-            md.openfiles()
-            energy, data, pos0, vel0 = md_io.simulate_md(md_params,
-                                                         self.distribution[cell,:], md,
-                                                         print_rate=100,
-                                                         save_rate=self.md_save_rate)
-            # check the dHdt
-#           timesteps_elapsed = self.n_timesteps_md
-#           while timesteps_elapsed < self.max_timesteps_md:
-#               mean = data.dHdt[0].mean(axis=0)
-#               std = data.dHdt[0].std(axis=0, ddof=1)
-            extend = True
-            while extend:
-                mean = data.dHdt.mean(axis=(0,1))
-                std = data.dHdt.std(axis=(0,1), ddof=1)
-                (lb, ub) = stats.norm.interval(
-                    0.95, loc=mean, scale=std/np.sqrt(self.n_timesteps_md *
-                                                      md_params.n_sims))
-                logging.debug('mean: \n' + np.array_str(mean))
-                logging.debug('std: \n' + np.array_str(std))
-                logging.debug('lower bound: \n' + np.array_str(lb)) 
-                logging.debug('upper bound: \n' + np.array_str(ub)) 
-                extend = False
-                for sp1 in range(self.n_species):
-                    for sp2 in range(self.n_species):
-                        if sp1 == sp2:
-                            continue
-                        if lb[sp1,sp2] * ub[sp1,sp2] < 0:
-                            extend = True
-                            logging.info("extending the MD with another simulation")
-                if md_params.n_sims == self.max_simulations_md:
-                    extend = False
-
-#               if extend:
-#                   md_params.n_timesteps += self.md_save_rate
-#                   energy, data = md_io.simulate_md(
-#                       md_params, self.distribution[cell,:], md,
-#                       print_rate=100, resample=False,
-#                       save_rate=self.md_save_rate,
-#                       resume=True, last_step=timesteps_elapsed)
-#                   timesteps_elapsed += self.md_save_rate
-                if extend:
-                    logging.info("doing another equilibration to decorrelate stuff")
-                    md.closefiles()
-                    md.openfiles()
-                    md_io.set_md_phasespace(pos0, vel0, md)
-                    md_io.equilibrate_md(md_params, md, print_rate=100,
-                                         save_rate=self.md_save_rate)
-                    md.closefiles()
-                    md.openfiles()
-                    logging.info('running another md')
-                    md_params.n_sims += 1
-                    energy, data, pos0, vel0 = md_io.simulate_md(
-                            md_params,
-                            self.distribution[cell,:], md,
-                            print_rate=200,
-                            save_rate=self.md_save_rate,
-                            current_sim=md_params.n_sims-1)
+            # loop over number of md simulations
+            for sim in range(self.n_simulations_md):
+                logging.info('---------------------------------------------------')
+                logging.info('SIMULATION %d of %d' % (sim+1, self.n_simulations_md))
+                logging.info('---------------------------------------------------')
+                # cell size depends on if doing small box equilibration first
+                if self.small_box_equilibration > 0:
+                    cell_size = self.cell_length_md / 2.
+                    cutoff = self.cutoff_md / 2.
                 else:
-                    break
-
-            md.closefiles()
-
-            # save data for auditing
-            np.save('energy', energy)
-            np.save('data.momentum', data.momentum)
-            np.save('data.stress', data.stress)
-            np.save('data.kinetic_energy', data.kinetic_energy)
-            np.save('data.heat', data.heat)
-            np.save('data.m5', data.m4)
-            np.save('data.dHdt', data.dHdt)
-            np.save('data.mass', data.mass)
-            np.save('data.time', data.time)
+                    cell_size = params.cell_length_md
+                    cutoff = params.cutoff_md
+    
+                # set up md parameters with the current state
+                logging.debug('setting md parameters')
+                md_params = md_io.md_parameters(
+                        n_sims=sim+1, cell_size=cell_size,
+                        n_timesteps=self.n_timesteps_md, timestep=self.timestep_md,
+                        movie_rate=self.movie_rate, n_species=self.n_species,
+                        density=self.density[cell,:], mass=self.mass,
+                        charge=self.charge, screen_length=screen_length,
+                        cutoff=cutoff, kinetic_energy=self.kinetic_energy[cell,:],
+                        bulk_velocity=bulk_velocity, friction=self.friction[0],
+                        n_mts_timesteps=self.mts_timesteps_md,
+                        mts_cutoff=self.mts_cutoff_md,
+                        mts_threshold=self.mts_threshold_md)
+                        
+                # equilibration phase
+                if self.small_box_equilibration > 0:
+                    logging.debug('equilibrating on the small box')
+                    # first equilibrate on a smaller box, if specified
+                    md_params.equilibration_time = self.small_box_equilibration
+    
+                    # set the parameters and phase space
+                    md_io.set_md_parameters(md_params, md)
+                    species, pos0, vel0 = md_io.generate_md_phasespace(md_params)
+                    md_io.set_md_phasespace(pos0, vel0, md)
+    
+                    # equilibration
+                    md_io.equilibrate_md(md_params, md, print_rate=1000,
+                                         save_rate=self.md_save_rate)
+                    pos1, vel1 = md_io.get_md_phasespace(md)
+    
+                    # expand the box and set up parameters
+                    md_io.expand_md_box(md_params, md)
+    
+                # first equilibration on full box
+                logging.debug('first full-size equilibration')
+                md_params.equilibration_time = self.equilibration_time[0]
+                md_io.equilibrate_md(md_params, md, print_rate=100,
+                                     save_rate=self.md_save_rate)
+    
+                # second equilibration on full box
+                logging.debug('second full-size equilibration')
+                md_params.change_friction(self.friction[1], md)
+                md_io.equilibrate_md(md_params, md, print_rate=100,
+                                     save_rate=self.md_save_rate)
+                md.closefiles()
+        
+                # run the simulations
+                logging.debug('starting simulation phase')
+                md.openfiles()
+                energy, data, pos0, vel0 = md_io.simulate_md(md_params,
+                                                             self.distribution[cell,:], md,
+                                                             print_rate=100,
+                                                             save_rate=self.md_save_rate,
+                                                             current_sim=sim)
+#               extend = True
+#               while extend:
+#                   mean = data.dHdt.mean(axis=(0,1))
+#                   std = data.dHdt.std(axis=(0,1), ddof=1)
+#                   (lb, ub) = stats.norm.interval(
+#                       0.95, loc=mean, scale=std/np.sqrt(self.n_timesteps_md *
+#                                                         md_params.n_sims))
+#                   logging.debug('mean: \n' + np.array_str(mean))
+#                   logging.debug('std: \n' + np.array_str(std))
+#                   logging.debug('lower bound: \n' + np.array_str(lb)) 
+#                   logging.debug('upper bound: \n' + np.array_str(ub)) 
+#                   extend = False
+#                   for sp1 in range(self.n_species):
+#                       for sp2 in range(self.n_species):
+#                           if sp1 == sp2:
+#                               continue
+#                           if lb[sp1,sp2] * ub[sp1,sp2] < 0:
+#                               extend = True
+#                               logging.info("extending the MD with another simulation")
+#                   if md_params.n_sims == self.max_simulations_md:
+#                       extend = False
+#   
+#                   if extend:
+#                       logging.info("doing another equilibration to decorrelate stuff")
+#                       md.closefiles()
+#                       md.openfiles()
+#                       md_io.set_md_phasespace(pos0, vel0, md)
+#                       md_io.equilibrate_md(md_params, md, print_rate=100,
+#                                            save_rate=self.md_save_rate)
+#                       md.closefiles()
+#                       md.openfiles()
+#                       logging.info('running another md')
+#                       md_params.n_sims += 1
+#                       energy, data, pos0, vel0 = md_io.simulate_md(
+#                               md_params,
+#                               self.distribution[cell,:], md,
+#                               print_rate=200,
+#                               save_rate=self.md_save_rate,
+#                               current_sim=md_params.n_sims-1)
+#                   else:
+#                       break
+    
+                md.closefiles()
+    
+                # save data for auditing
+                np.save('energy', energy)
+                np.save('data.momentum', data.momentum)
+                np.save('data.stress', data.stress)
+                np.save('data.kinetic_energy', data.kinetic_energy)
+                np.save('data.heat', data.heat)
+                np.save('data.m5', data.m4)
+                np.save('data.dHdt', data.dHdt)
+                np.save('data.mass', data.mass)
+                np.save('data.time', data.time)
+                
+                # end of loop over simulations
 
             # compute the taus
             logging.info('Computing taus in cell %d\n' % (cell))

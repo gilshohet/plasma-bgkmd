@@ -805,9 +805,9 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
 
     # loop over simulations
     for sim in range(current_sim, params.n_sims):
-        logging.info('---------------------------------------------------')
-        logging.info('SIMULATION %d of %d' % (sim+1, params.n_sims))
-        logging.info('---------------------------------------------------')
+#        logging.info('---------------------------------------------------')
+#        logging.info('SIMULATION %d of %d' % (sim+1, params.n_sims))
+#        logging.info('---------------------------------------------------')
 
         # velocity resample if needed
         if resample and not resume:
