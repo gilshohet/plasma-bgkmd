@@ -10,7 +10,7 @@ initial_temperature : 1000, 500
 initial_velocity : 0, 0
 
 # tau regression
-smart_tau : 1, -1, 100, 100, 100, 0.05
+smart_tau : 1, -1, 100, 100, 100, 0.1
 
 # BGK simulation parameters
 n_dim : 0
@@ -35,7 +35,7 @@ equilibration_time : 0.75, 0.75
 small_box_equilibration : 5.0
 #equilibration_time : 0.1, 0.1
 #small_box_equilibration : 2.0
-n_simulations_md : 2
+n_simulations_md : 3
 max_simulations_md : 4
 cell_length_md : 18
 cutoff_md : 8
