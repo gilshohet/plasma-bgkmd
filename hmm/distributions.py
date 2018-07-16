@@ -45,6 +45,16 @@ def discrete_maxwellian3D(vx, vy, vz, mass=1.0, density=1.0,
                     np.exp(-(mass / (2. * temperature)) * w2))
     return distribution
 
+def discrete_maxwellian3D_wrapper(distribution):
+    vx = distribution._x
+    vy = distribution._y
+    vz = distribution._z
+    f = distribution.distribution
+    m = distribution.mass
+    n = distribution.density
+    u = distribution.momentum / m
+    KE = distribution.kinetic_energy
+    return discrete_maxwellian3D(vx, vy, vz, m, n, u, KE)
 
 def equilibrium_maxwellian3D(n1, n2, u1, u2, T1, T2, m1, m2, vx1, vy1, vz1,
                              vx2, vy2, vz2, tau_ratio, return_all=False):
@@ -102,6 +112,26 @@ def equilibrium_maxwellian3D(n1, n2, u1, u2, T1, T2, m1, m2, vx1, vy1, vz1,
     else:
         return f12, f21, u12, T12
 
+def equilibrium_maxwellian3D_wrapper(distribution1, distribution2, tau_ratio):
+    vx1 = distribution1._x
+    vx2 = distribution2._x
+    vy1 = distribution1._y
+    vy2 = distribution2._y
+    vz1 = distribution1._z
+    vz2 = distribution2._z
+    f1 = distribution1.distribution
+    f2 = distribution2.distribution
+    m1 = distribution1.mass
+    m2 = distribution2.mass
+    n1 = distribution1.density
+    n2 = distribution2.density
+    u1 = distribution1.momentum / m1
+    u2 = distribution2.momentum / m2
+    T1 = distribution1.kinetic_energy * 2./3.
+    T2 = distribution2.kinetic_energy * 2./3.
+    return equilibrium_maxwellian3D(n1, n2, u1, u2, T1, T2, m1, m2,
+                                    vx1, vy1, vz1, vx2, vy2, vz2,
+                                    tau_ratio, return_all=False)
 
 class linear_interpolated_rv_2D(object):
     '''

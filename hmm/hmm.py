@@ -48,6 +48,8 @@ class simulation(object):
         cross_tau_tol : how much cross extrpolation can deviate from last tau before MD
         window_tol : max extrapolation time relative to width of window
         f_tol : how much f can deviate before MD (least squares sense)
+    which_tau : int
+        which tau to use, 0 for momentum, 1 for temperature, 2 for optimization
 
     Species parameter inputs
     ------------------------
@@ -247,6 +249,13 @@ class simulation(object):
         except KeyError:
             self.smart_tau = None
             logging.debug('not using extrapolated taus')
+
+        try:
+            self.which_tau = int(param_dict['which_tau'])
+            logging.debug('which_tau: ' + str(self.which_tau))
+        except KeyError:
+            self.which_tau = 2
+            logging.debug('using optimization tau by default')
 
         try:
             self.mass = np.fromstring(param_dict['mass'], sep=',') * units.g
@@ -869,7 +878,7 @@ class simulation(object):
                 np.save('data.stress', data.stress)
                 np.save('data.kinetic_energy', data.kinetic_energy)
                 np.save('data.heat', data.heat)
-                np.save('data.m5', data.m4)
+                np.save('data.m4', data.m4)
                 np.save('data.dHdt', data.dHdt)
                 np.save('data.mass', data.mass)
                 np.save('data.time', data.time)
@@ -884,7 +893,7 @@ class simulation(object):
              self.tau_error_hist[self.bgk_counter,cell,:,:],
              self.f_eq[cell,:,:]) = \
                     tau_utils.compute_taus(md_params, self.distribution[cell,:],
-                                           dHdt)
+                                           dHdt, self.which_tau)
             self.taus /= units.s
             self.tau_times[self.bgk_counter] = self.current_time
             self.tau_hist[self.bgk_counter,:,:,:] = self.taus
@@ -920,6 +929,18 @@ class simulation(object):
                 for sp2 in range(self.n_species):
                     if self.f_eq[cell,sp1,sp2] is None:
                         continue
+                    # first make sure f_eq is up to date
+                    if sp1 == sp2:
+                        self.f_eq[cell,sp1,sp2] = \
+                            distributions.discrete_maxwellian3D_wrapper(
+                                self.distribution[cell,sp1]) 
+                    elif sp1 < sp2:
+                        self.f_eq[cell,sp1,sp2], self.f_eq[cell,sp2,sp1] = \
+                            distributions.equilibrium_maxwellian3D_wrapper(
+                                self.distribution[cell,sp1],
+                                self.distribution[cell,sp2],
+                                self.taus[cell,sp2,sp1] / self.taus[cell,sp1,sp2])
+                                
                     num_integrand = (self.f_eq[cell,sp1,sp2] -
                                      self.distribution[cell,sp1].distribution)**2
                     den_integrand = self.f_eq[cell,sp1,sp2]**2

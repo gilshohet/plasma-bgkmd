@@ -10,6 +10,7 @@ initial_temperature : 1000, 500
 initial_velocity : 0, 0
 
 # tau regression
+which_tau : 1
 smart_tau : 1, -1, 100, 100, 100, 100
 
 # BGK simulation parameters
@@ -23,7 +24,7 @@ tau_update_rate : 500
 data_rate_bgk : 1
 run_to_completion_tol : 1e-2
 rhs_tol_bgk : 0.95
-bgk_path : /home/BGKMD/BGK2.0/MultiBGK/
+bgk_path : ~/Multi-BGK/
 
 # MD simulation parameters
 timestep_md : 0.0005

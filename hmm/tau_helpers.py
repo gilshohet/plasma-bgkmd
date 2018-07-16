@@ -64,7 +64,7 @@ def compute_intraspecies_tau(distribution, dHdt):
 
     return tau, f_eq
 
-def compute_interspecies_tau(distribution1, distribution2, dHdt12, dHdt21):
+def compute_interspecies_tau(distribution1, distribution2, dHdt12, dHdt21, which_tau=2):
     ''' compute the interspecies relaxation parameters by a nonlinear least
     squares solve to find the optimal ratio of taus
     
@@ -75,6 +75,8 @@ def compute_interspecies_tau(distribution1, distribution2, dHdt12, dHdt21):
         the distributions of species 1 and 2
     dHdt12, dHdt21 : floats
         dHdt of species 1 due to species 2 and vice-versa, respectively
+    which_tau : int
+        which tau computation method to use
 
     Returns
     -------
@@ -107,43 +109,48 @@ def compute_interspecies_tau(distribution1, distribution2, dHdt12, dHdt21):
     T2 = distribution2.kinetic_energy * 2./3.
     
     # initial guess for tau ratio, assume temperature relaxation
-    tau_ratio0 = n2 / n1
-    tau_ratio = tau_ratio0
+#   tau_ratio0 = n2 / n1
+#   tau_ratio0 = n2 * m2 / (n1 * m1)
+#   tau_ratio0 = 0.5 * n2 / n1 * (1 + m2 / m1)
+#   tau_ratio = tau_ratio0
+    if which_tau is 0:
+        tau_ratio0 = n2 * m2 / (n1 * m1)
+    elif which_tau is 1:
+        tau_ratio0 = n2 / n1
+    else:
+        tau_ratio0 = 0.5 * n2 / n1 * (1 + m2 / m1)
 
-#   # mixture quantitities
-#   f12, f21, u12, T12 = distributions.equilibrium_maxwellian3D(
-#           n1, n2, u1, u2, T1, T2, m1, m2, vx1, vy1, vz1, vx2, vy2, vz2,
-#           tau_ratio0, return_all=True)
+    # mixture quantitities
+    f12, f21, u12, T12 = distributions.equilibrium_maxwellian3D(
+            n1, n2, u1, u2, T1, T2, m1, m2, vx1, vy1, vz1, vx2, vy2, vz2,
+            tau_ratio0, return_all=True)
 
-#   # dH in the kinetic sense
-#   dH12_bgk = (triple_integral(f12 * np.log(f1), vx1, vy1, vz1) - 
-#               triple_integral(f1 * np.log(f1), vx1, vy1, vz1))
-#   dH21_bgk = (triple_integral(f21 * np.log(f2), vx2, vy2, vz2) - 
-#               triple_integral(f2 * np.log(f2), vx2, vy2, vz2))
+    # dH in the kinetic sense
+    dH12_bgk = (triple_integral(f12 * np.log(f1), vx1, vy1, vz1) - 
+                triple_integral(f1 * np.log(f1), vx1, vy1, vz1))
+    dH21_bgk = (triple_integral(f21 * np.log(f2), vx2, vy2, vz2) - 
+                triple_integral(f2 * np.log(f2), vx2, vy2, vz2))
 
-#   # least squares functions
-#   def residual(tau_ratio):
-#       tau_ratio = tau_ratio[0]
-#       # mixture quantitities
-#       f12, f21, u12, T12 = distributions.equilibrium_maxwellian3D(
-#               n1, n2, u1, u2, T1, T2, m1, m2, vx1, vy1, vz1, vx2, vy2, vz2,
-#               tau_ratio, return_all=True)
+    # least squares functions
+    def residual(tau_ratio):
+        tau_ratio = tau_ratio[0]
+        # mixture quantitities
+        f12, f21, u12, T12 = distributions.equilibrium_maxwellian3D(
+                n1, n2, u1, u2, T1, T2, m1, m2, vx1, vy1, vz1, vx2, vy2, vz2,
+                tau_ratio, return_all=True)
 
-#       # dH in the kinetic sense
-#       dH12_bgk = (triple_integral(f12 * np.log(f1), vx1, vy1, vz1) - 
-#                   triple_integral(f1 * np.log(f1), vx1, vy1, vz1))
-#       dH21_bgk = (triple_integral(f21 * np.log(f2), vx2, vy2, vz2) - 
-#                   triple_integral(f2 * np.log(f2), vx2, vy2, vz2))
-#       tau_kl = ((dHdt12 * dH12_bgk + tau_ratio * dHdt21 * dH21_bgk) / 
-#                 (dHdt12**2 + dHdt21**2))
-#       tau_kl = (((dH12_bgk * dHdt21 * tau_ratio)**2 + (dH21_bgk * dHdt12)**2) /
-#                 (dHdt12 * dHdt21 * tau_ratio * 
-#                  (dH12_bgk * dHdt21 * tau_ratio + dH21_bgk * dHdt12)))
-#       resid =  np.array([(dHdt12 - dH12_bgk / tau_kl) / dHdt12,
-#                          (dHdt21 - dH21_bgk / (tau_kl * tau_ratio)) / dHdt21])
-#       logging.debug('residual: ' + np.array_str(resid))
-#       logging.debug('ratio of taus: %f' % tau_ratio)
-#       return resid
+        # dH in the kinetic sense
+        dH12_bgk = (triple_integral(f12 * np.log(f1), vx1, vy1, vz1) - 
+                    triple_integral(f1 * np.log(f1), vx1, vy1, vz1))
+        dH21_bgk = (triple_integral(f21 * np.log(f2), vx2, vy2, vz2) - 
+                    triple_integral(f2 * np.log(f2), vx2, vy2, vz2))
+        tau_kl = ((dHdt12 * dH12_bgk + tau_ratio * dHdt21 * dH21_bgk) / 
+                  (dHdt12**2 + dHdt21**2 * tau_ratio**2))
+        resid =  np.array([(dHdt12 - dH12_bgk / tau_kl) / dHdt12,
+                           (dHdt21 - dH21_bgk / (tau_kl * tau_ratio)) / dHdt21])
+        logging.debug('residual: ' + np.array_str(resid))
+        logging.debug('ratio of taus: %f' % tau_ratio)
+        return resid
 
 #   def jacobian(tau_ratio):
 #       ''' ANALYTICAL JACOBIAN DOES NOT CURRENTLY SEEM TO WORK '''
@@ -219,32 +226,37 @@ def compute_interspecies_tau(distribution1, distribution2, dHdt12, dHdt21):
 #              1. / (tau_ratio * tau12 * dHdt21) * dH21)
 #       dG = np.array([dG1, dG2]).reshape((2,1))
 #       return dG
-#   
-#   logging.debug('doing least squares optimization')
-#   temperature_tau_ratio = n2 / n1
-#   momentum_tau_ratio = (m2 * n2) / (m1 * n1)
-#   lb = min(temperature_tau_ratio, momentum_tau_ratio)
-#   ub = max(temperature_tau_ratio, momentum_tau_ratio)
-#   output = scipy.optimize.least_squares(residual, tau_ratio0, #jac=jacobian,
-#                                         bounds=(lb, ub),
-#                                         ftol=1e-6, xtol=1e-6, gtol=1e-6)
-#   tau_ratio = output.x[0]
+    
+    if which_tau is 2:
+        logging.debug('doing least squares optimization')
+        temperature_tau_ratio = n2 / n1
+        momentum_tau_ratio = (m2 * n2) / (m1 * n1)
+        lb = min(temperature_tau_ratio, momentum_tau_ratio)
+        ub = max(temperature_tau_ratio, momentum_tau_ratio)
+        output = scipy.optimize.least_squares(residual, tau_ratio0, #jac=jacobian,
+                                              bounds=(lb, ub),
+                                              ftol=1e-6, xtol=1e-6, gtol=1e-6)
+        tau_ratio = output.x[0]
+        error = abs(output.fun)
+        logging.debug('least squares terminated due to: ' + output.message)
+    else:
+        tau_ratio = tau_ratio0
+        error = np.array([-1, -1])
 
     # mixture quantitities
     f12, f21, u12, T12 = distributions.equilibrium_maxwellian3D(
             n1, n2, u1, u2, T1, T2, m1, m2, vx1, vy1, vz1, vx2, vy2, vz2,
             tau_ratio, return_all=True)
-
+    
     # dH in the kinetic sense
     dH12_bgk = (triple_integral(f12 * np.log(f1), vx1, vy1, vz1) - 
                 triple_integral(f1 * np.log(f1), vx1, vy1, vz1))
     dH21_bgk = (triple_integral(f21 * np.log(f2), vx2, vy2, vz2) - 
                 triple_integral(f2 * np.log(f2), vx2, vy2, vz2))
     tau12 = ((dHdt12 * dH12_bgk + tau_ratio * dHdt21 * dH21_bgk) / 
-              (dHdt12**2 + dHdt21**2))
+              (dHdt12**2 + tau_ratio**2 * dHdt21**2))
     tau21 = tau_ratio * tau12
-    error = [-1.0, -1.0]#abs(output.fun)# / np.array([dHdt12, dHdt21]))
-#   logging.debug('least squares terminated due to: ' + output.message)
+
 
     return tau12, tau21, error, f12, f21
 

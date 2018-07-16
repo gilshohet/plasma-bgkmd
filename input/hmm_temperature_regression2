@@ -1,5 +1,5 @@
 # material parameters
-testcase : hmm_temperature_regression
+testcase : hmm_temperature_regression2
 only_md : False
 resample : True
 n_species : 2
@@ -9,8 +9,8 @@ initial_density : 6.0e22, 6.0e22
 initial_temperature : 1000, 500
 initial_velocity : 0, 0
 
-# tau regression
-which_tau : 1
+# tau stuff
+which_tau : 2
 smart_tau : 5, 5, 0.5, 0.1, 1.0, 0.1
 
 # BGK simulation parameters

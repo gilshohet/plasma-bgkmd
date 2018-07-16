@@ -70,7 +70,7 @@ def compute_dHdt(params, distribution, vels, forces):
     return dHdt
 
 
-def compute_taus(params, distribution, dHdt):
+def compute_taus(params, distribution, dHdt, which_tau=2):
     '''compute all the taus given the distributions and dHdt
     
     computes intraspecies taus, then computes interspecies pairwise by solving
@@ -111,7 +111,7 @@ def compute_taus(params, distribution, dHdt):
         for sp2 in range(sp1+1, params.n_species):
             tau12, tau21, err, f12, f21 = tau_helpers.compute_interspecies_tau(
                     distribution[sp1], distribution[sp2], dHdt[sp1,sp2],
-                    dHdt[sp2,sp1])
+                    dHdt[sp2,sp1], which_tau)
             taus[sp1,sp2] = tau12
             taus[sp2,sp1] = tau21
             error[sp1,sp2] = err[0]

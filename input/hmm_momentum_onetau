@@ -1,17 +1,17 @@
 # material parameters
-testcase : hmm_temperature_regression
+testcase : hmm_momentum_one_tau
 only_md : False
 resample : True
 n_species : 2
-mass : 1.6726219e-24, 4.5129913e-23
-charge : 1.0, 11.5355
+mass : 1.6726219e-24, 6.69048759e-24
+charge : 1.0, 2.0
 initial_density : 6.0e22, 6.0e22
-initial_temperature : 1000, 500
-initial_velocity : 0, 0
+initial_temperature : 250, 250
+initial_velocity : 15474844.812700396, 0
 
 # tau regression
 which_tau : 1
-smart_tau : 5, 5, 0.5, 0.1, 1.0, 0.1
+smart_tau : 1, -1, 100, 100, 100, 100
 
 # BGK simulation parameters
 n_dim : 0
@@ -34,10 +34,7 @@ md_save_rate : 2000
 friction : 0.5, 0.1
 equilibration_time : 0.75, 0.75
 small_box_equilibration : 5.0
-#equilibration_time : 0.1, 0.1
-#small_box_equilibration : 2.0
-n_simulations_md : 3
-max_simulations_md : 4
+n_simulations_md : 5
 cell_length_md : 18
 cutoff_md : 8
 movie_rate : 8000
