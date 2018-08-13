@@ -1,9 +1,7 @@
-# testcase parameters
-testcase : md_temperature_1000_1
-only_md : True
-resample : False
-
 # material parameters
+testcase : hmm_temperature_one_tau_opt
+only_md : False
+resample : True
 n_species : 2
 mass : 1.6726219e-24, 4.5129913e-23
 charge : 1.0, 11.5355
@@ -11,20 +9,36 @@ initial_density : 6.0e22, 6.0e22
 initial_temperature : 1000, 500
 initial_velocity : 0, 0
 
+# tau stuff
+which_tau : 2
+smart_tau : 1, -1, 100, 100, 100, 100
+
 # BGK simulation parameters
+n_dim : 0
 n_vel : 100
-tau_update_rate : 0
+order : 1
+implicit : False
+timestep_bgk : 1e-15
+final_time : 1.5e-12
+tau_update_rate : 500
+data_rate_bgk : 1
+run_to_completion_tol : 1e-2
+rhs_tol_bgk : 0.95
+bgk_path : ~/Multi-BGK/
+write_distribution: True
 
 # MD simulation parameters
 timestep_md : 0.0005
-n_timesteps_md : 20000
+n_timesteps_md : 8000
+#n_timesteps_md : 500
+md_save_rate : 2000
 friction : 0.5, 0.1
 equilibration_time : 0.75, 0.75
 small_box_equilibration : 5.0
-n_simulations_md : 1
+n_simulations_md : 5
 cell_length_md : 18
 cutoff_md : 8
-movie_rate : 100000
+movie_rate : 8000
 mts_cutoff_md : 0.5
 mts_threshold_md : 1e-5
 mts_timesteps_md : 100

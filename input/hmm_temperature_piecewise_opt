@@ -1,5 +1,5 @@
 # material parameters
-testcase : hmm_temperature_no_regression2
+testcase : hmm_temperature_piecewise_opt
 only_md : False
 resample : True
 n_species : 2
@@ -10,8 +10,8 @@ initial_temperature : 1000, 500
 initial_velocity : 0, 0
 
 # tau stuff
-smart_tau : 1, -1, 100, 100, 100, 0.1
 which_tau: 2
+smart_tau : 1, -1, 100, 100, 100, 0.1
 
 # BGK simulation parameters
 n_dim : 0
@@ -25,6 +25,7 @@ data_rate_bgk : 1
 run_to_completion_tol : 1e-2
 rhs_tol_bgk : 0.95
 bgk_path : ~/Multi-BGK/
+write_distribution: True
 
 # MD simulation parameters
 timestep_md : 0.0005
