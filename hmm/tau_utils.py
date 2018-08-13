@@ -161,7 +161,7 @@ def momentum_transfer_tau(params):
     n_species = params.n_species
     density = params.density
     mass = params.mass
-    temp = 2./3. * params.kinetic_energy
+    temp = params.stress[:,np.arange(3),np.arange(3)].mean(axis=-1)
     charge = params.charge
     screen = params.screen_length
     taus = np.empty((n_species, n_species))

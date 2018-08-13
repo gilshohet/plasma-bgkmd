@@ -51,8 +51,6 @@ class bgk_parameters(object):
         the discrete distribution associated with each species
     taus : n_species x n_species numpy array
         the interspecies and intraspecies taus
-    run_to_completion : boolean
-        whether to use the 2-norm-based stopping condition
     bgk_path : string
         path to the BGK program root folder
     '''
@@ -60,7 +58,7 @@ class bgk_parameters(object):
     def __init__ (self, case='test', n_dims=0, length=0, n_cells=1, n_vel=100,
                   timestep=1.0e-14, current_time=0.0, run_time=2.0e-11, order=1,
                   implicit=False, data_rate=1, n_species=1, charge=[1.0],
-                  distribution=None, taus=None, run_to_completion=True,
+                  mass=None, distribution=None, taus=None,
                   rhs_tol=1.0, bgk_path='.'):
         if distribution is None:
             raise ValueError('Need to specify the distributions at a minimum.')
@@ -81,9 +79,11 @@ class bgk_parameters(object):
         self.mass = np.empty(n_species)
         self.taus = taus
         self.rhs_tol = rhs_tol
-        self.run_to_completion = run_to_completion
-        for sp in range(n_species):
-            self.mass[sp] = (distribution[0,sp].mass / units.g)
+        if mass is None:
+            for sp in range(n_species):
+                self.mass[sp] = (distribution[0,sp].mass / units.g)
+        else:
+            self.mass = mass / units.g
         if not bgk_path.endswith('/'):
             bgk_path += '/'
         self.bgk_path = bgk_path
@@ -147,7 +147,7 @@ def write_bgk_parameters(params):
         all the parameters for the simulation
     '''
 
-    path = params.bgk_path + 'input/' + params.case
+    path = os.path.join(params.bgk_path, 'input', params.case)
     with open(path, 'w') as f:
         # user defined parameters
         f.write('dims\n')
@@ -245,7 +245,7 @@ def read_distributions0D(params):
     '''
 
     distribution = []
-    path = params.bgk_path + 'Data/' + params.case + '_gridinfo.dat'
+    path = os.path.join(params.bgk_path, 'Data', params.case + '_gridinfo.dat')
     with open(path, 'r') as f:
         for sp in range(params.n_species):
             line = f.readline().split()
@@ -331,10 +331,7 @@ def run_bgk_simulation(params):
     else:
         tau_flag = 0
 
-    if params.run_to_completion:
-        restart_flag = 2
-    else:
-        restart_flag = 4
+    restart_flag = 4
     
     # go to BGK directory
     start_path = os.getcwd()

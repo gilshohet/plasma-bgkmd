@@ -50,8 +50,8 @@ class md_parameters(object):
     equilibration_time : float
         length of equilibration in terms of the slowest plasma period (1 / f_p)
         (actual time is double this because using strong then weak thermostat)
-    kinetic_energy : n_species length array-like float
-        average kinetic energy per particle of each species for equilibration
+    stress : n_species x 3 x 3 array-like float
+        stress tensor for the species, used in equilibration
     bulk_velocity : nSpecies x 3 array-like of floats
         bulk velocity of for equlibration for each species
     friction : n_species or 1 length array-like of floats
@@ -70,7 +70,7 @@ class md_parameters(object):
                  timestep=1.0e-3, movie_rate=10, n_species=1, density=[1.],
                  mass=[1.], charge=[1.0], screen_length=1.0e-1, cutoff=10.,
                  ext_field=[0.0, 0.0, 0.0], equilibration_time=1.0,
-                 kinetic_energy=[1.0], bulk_velocity=[[0.0, 0.0, 0.0]],
+                 stress=np.eye(3), bulk_velocity=[[0.0, 0.0, 0.0]],
                  friction=[1.0], n_mts_timesteps=100, mts_cutoff=1.0,
                  mts_threshold=100, n_procs=1000000):
         self.n_sims = n_sims
@@ -85,7 +85,7 @@ class md_parameters(object):
         self.cutoff = cutoff
         self.ext_field = ext_field
         self.equilibration_time = equilibration_time
-        self.kinetic_energy = np.array(kinetic_energy)
+        self.stress = stress
         self.bulk_velocity = np.array(bulk_velocity)
         self.n_mts_timesteps = n_mts_timesteps
         self.mts_cutoff = mts_cutoff
@@ -320,8 +320,8 @@ def set_md_parameters(params, md):
                 params.bulk_velocity[sp,1]
         md.particles_mod.uz[sp_start[sp]:sp_end[sp]] = \
                 params.bulk_velocity[sp,2]
-        md.particles_mod.avgke[sp_start[sp]:sp_end[sp]] = \
-                params.kinetic_energy[sp]
+        md.particles_mod.avgke[sp_start[sp]:sp_end[sp],:] = \
+                3. / 2. * params.stress[sp,np.arange(3),np.arange(3)]
 
 
 def expand_md_box(params, md, factor=[2, 2]):
@@ -395,6 +395,7 @@ def set_md_phasespace(pos, vel, md):
 
     # set arrays with correct phasespace information
     logging.debug('setting md phase space')
+    logging.debug(str(pos.shape[0]) + ' particles')
     md.particles_mod.rx[:] = pos[:,0]
     md.particles_mod.ry[:] = pos[:,1]
     md.particles_mod.rz[:] = pos[:,2]
@@ -571,8 +572,8 @@ def generate_md_phasespace(params):
     pos = uniform(low=-params.cell_size/2., high=params.cell_size/2.,
                   size=(params.n_particles, 3))
     vel = np.vstack([multivariate_normal(mean=bulk_velocity[i,:],
-                                         cov=(2./3. * params.kinetic_energy[i] /
-                                              params.mass[i]*np.eye(3)),
+                                         cov=(params.stress[i] /
+                                              params.mass[i] * np.eye(3)),
                                          size=n)
                      for i, n in enumerate(params.particles)])
 
@@ -611,7 +612,8 @@ def velocity_resample(distribution, params, atol=[1e-2, 1.5e-2, 2e-2],
 
     logging.debug('resampling the MD velocities')
     vel = np.empty((params.n_particles, 3))
-    thermal_speed = np.sqrt(2./3. * params.kinetic_energy / params.mass)
+    thermal_speed = np.sqrt(
+        params.stress[:,np.arange(3),np.arange(3)].mean(axis=-1) / params.mass)
 
     # draw velocity samples for each species until get acceptable distribution
     counter = 0

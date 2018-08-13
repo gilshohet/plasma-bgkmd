@@ -104,7 +104,7 @@ module particles_mod
 
     ! stuff for thermostat
     real(wp), dimension(:), allocatable:: friction              ! friction term (gamma)
-    real(wp), dimension(:), allocatable:: avgKE                 ! average kinetic energy for thermostat
+    real(wp), dimension(:,:), allocatable:: avgKE               ! average kinetic energy for thermostat
     real(wp), dimension(:), allocatable:: ux, uy, uz            ! bulk velocity for thermostat
     real(wp), dimension(:), allocatable:: rv1, rv2, rv3, rv4    ! Random variable vectors for sampling normal distribution
 
@@ -880,13 +880,13 @@ subroutine forces
         call random_number(rv1) ; call random_number(rv2) 
         call random_number(rv3) ; call random_number(rv4)
         ax = ax - friction * (vx - ux) &
-            + sqrt(4.0_wp * friction * avgKE / (3.0_wp * mass * timestep)) &
+            + sqrt(4.0_wp * friction * avgKE(:,1) / (3.0_wp * mass * timestep)) &
             * sqrt(-2.0_wp * log(rv1)) * cos(2.0_wp * pi * rv2)
         ay = ay - friction * (vy - uy) &
-            + sqrt(4.0_wp * friction * avgKE / (3.0_wp * mass * timestep)) &
+            + sqrt(4.0_wp * friction * avgKE(:,2) / (3.0_wp * mass * timestep)) &
             * sqrt(-2.0_wp * log(rv1)) * sin(2.0_wp * pi * rv2)
         az = az - friction * (vz - uz) &
-            + sqrt(4.0_wp * friction * avgKE / (3.0_wp * mass * timestep)) &
+            + sqrt(4.0_wp * friction * avgKE(:,3) / (3.0_wp * mass * timestep)) &
             * sqrt(-2.0_wp * log(rv3)) * cos(2.0_wp * pi * rv4)
     end if
 
@@ -966,7 +966,7 @@ subroutine iniSimulation
     ! fill Langevin thermostat variables if needed
     if (thermostatOn) then
         allocate(friction(nParticles)) ; friction=0.0_wp
-        allocate(avgKE(nParticles)) ; avgKE = 0.0_wp
+        allocate(avgKE(nParticles, 3)) ; avgKE = 0.0_wp
         allocate(ux(nParticles), uy(nParticles), uz(nParticles)) ; ux=0.0_wp ; uy=0.0_wp ; uz=0.0_wp
         allocate(rv1(nParticles), rv2(nParticles), rv3(nParticles), rv4(nParticles))
         rv1=0.0_wp ; rv2=0.0_wp ; rv3=0.0_wp ; rv4=0.0_wp

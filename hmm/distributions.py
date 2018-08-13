@@ -14,7 +14,8 @@ def discrete_maxwellian3D(vx, vy, vz, mass=1.0, density=1.0,
                           bulk_velocity=[0.0, 0.0, 0.0], average_KE = 1.0):
     '''
     build a 3D maxwellian distribution given the number density, bulk velocity,
-    and average kinetic energy per particle, sampled at the given velocities
+    and average kinetic energy per particle, sampled at the given velocities,
+    allowing for bi/tri-maxwellian distribution (different KE in x, y, z)
 
     Parameters
     ----------
@@ -26,7 +27,7 @@ def discrete_maxwellian3D(vx, vy, vz, mass=1.0, density=1.0,
         number density of the species
     bulk_velocity : 1x3 array-like of floats
         bulk velocity of the species
-    average_KE : float
+    average_KE : float or 1x3 array-like of floats
         average kinetic energy of a particle in the species
     
     Returns
@@ -38,11 +39,16 @@ def discrete_maxwellian3D(vx, vy, vz, mass=1.0, density=1.0,
     if vx.ndim is not 3:
         vx, vy, vz = np.meshgrid(vx, vy, vz, indexing='ij')
 
-    temperature = 2./3. * average_KE
-    w2 = ((vx - bulk_velocity[0])**2 + (vy - bulk_velocity[1])**2 +
-          (vz - bulk_velocity[2])**2)
-    distribution = (density * (mass / (2 * pi * temperature))**(3./2.) * 
-                    np.exp(-(mass / (2. * temperature)) * w2))
+    average_KE = np.array(average_KE)
+    if len(average_KE.shape) == 0 or len(average_KE) == 1:
+        average_KE = average_KE.repeat(3)
+    temperature = 2. * average_KE
+    w2 = ((vx - bulk_velocity[0])**2 / temperature[0] + 
+          (vy - bulk_velocity[1])**2 / temperature[1] +
+          (vz - bulk_velocity[2])**2 / temperature[2])
+    distribution = (density * (mass / (2 * pi))**(3./2.) /
+                    temperature.prod()**(1./2.) * 
+                    np.exp(-(mass / 2.) * w2))
     return distribution
 
 def discrete_maxwellian3D_wrapper(distribution):
@@ -348,3 +354,11 @@ class linear_interpolated_rv_3D(object):
         return np.column_stack((x, y, z))
 
 
+    def write_cross_section(self, filehandle):
+        '''
+        write a the x-direction cross section of the distribution,
+        where y and z have been integrated out.
+        '''
+        
+        np.save(filehandle, np.trapz(np.trapz(self.distribution, self._z, axis=2),
+                                     self._y, axis=1))

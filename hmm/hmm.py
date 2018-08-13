@@ -59,9 +59,11 @@ class simulation(object):
         mass of each species (in grams)
     charge : n_species float array
         charge (Z) of each species
+    init_from_file : boolean
+        flag to read initial distribution from file (default false)
     initial_density : n_cells x n_species float array
         the initial density of each species in each cell (per cc)
-    initial_temperature : n_cells x n_species float array
+    initial_temperature : n_cells x n_species x 3 float array
         the initial temperature of each species in each cell (in eV)
     initial_velocity : n_cells x n_species float array
         the initial x-velocity of each species in each cell (in cm/s)
@@ -92,6 +94,8 @@ class simulation(object):
         tolerance for when to send it back to MD from BGK
     data_rate_bgk : int
         how often to write data to file in the bgk simulations
+    write_distribution : int
+        whether to write a distribution cross-section each time step
     bgk_path : string
         path to the main BGK folder
 
@@ -403,9 +407,21 @@ class simulation(object):
             logging.debug('bgk data rate unspecified, defaulting to every step')
 
         try:
+            self.write_distribution = int(bool(param_dict['write_distribution']
+                                           not in ['F', 'f', 'False',
+                                                   'false', '0']))
+            logging.debug('write distribution: %d' %
+                          self.write_distribution)
+        except KeyError:
+            self.write_distribution = 0
+            logging.debug('write distribution unspecified, defaulting to false')
+
+        try:
             self.bgk_path = param_dict['bgk_path']
             logging.debug('looking at path: ' + self.bgk_path +
                           ' for BGK executable and input/output files')
+            if self.bgk_path.startswith('~'):
+                self.bgk_path = os.path.expanduser(self.bgk_path)
         except KeyError:
             err = 'missing parameter \'bgk_path\''
             if not self.only_md:
@@ -565,57 +581,70 @@ class simulation(object):
             self.md_last_step = 0
 
         try:
-            initial_density = (np.fromstring(param_dict['initial_density'], 
-                                             sep=',') / units.cm**3) 
-            if len(initial_density) != self.n_species * self.n_cells_bgk:
-                raise ValueError
-            self.initial_density = initial_density.reshape((self.n_cells_bgk,
-                                                            self.n_species))
-            logging.debug('initial density: ' +
-                          np.array_str(self.initial_density))
-        except ValueError:
-            err = ('\'density\' must be n_species x n_cells_bgk' +
-                   ' comma-separated floats')
-            raise ValueError(err)
+            self.init_from_file = int(bool(param_dict['init_from_file']
+                                           not in ['F', 'f', 'False',
+                                                   'false', '0']))
+            logging.info('initializing distribution from data file')
         except KeyError:
-            err = 'missing parameter \'initial_density\''
-            raise KeyError(err)
-        
-        try:
-            initial_temperature = \
-                    (np.fromstring(param_dict['initial_temperature'], sep=',')
-                     * units.eV)
-            if (len(initial_temperature) is not 
-                    self.n_species * self.n_cells_bgk):
-                raise ValueError
-            self.initial_temperature = initial_temperature.reshape(
-                    (self.n_cells_bgk, self.n_species))
-            logging.debug('initial temperature: ' +
-                          np.array_str(self.initial_temperature))
-        except ValueError:
-            err = ('\'temperature\' must be n_species x n_cells_bgk' +
-                   ' comma-separated floats')
-            raise ValueError(err)
-        except KeyError:
-            err = 'missing parameter \'initial_temperature\''
-            raise KeyError(err)
+            self.init_from_file = False
+            logging.info('using initial conditions from input file')
 
-        try:
-            initial_velocity = (np.fromstring(param_dict['initial_velocity'],
-                                              sep=',') * units.cm / units.s)
-            if len(initial_velocity) != self.n_species * self.n_cells_bgk:
-                raise ValueError
-            self.initial_velocity = initial_velocity.reshape((self.n_cells_bgk,
-                                                              self.n_species))
-            logging.debug('initial bulk velocity: ' +
-                          np.array_str(self.initial_velocity))
-        except ValueError:
-            err = ('\'velocity\' must be n_species x n_cells_bgk' +
-                   ' comma-separated floats')
-            raise ValueError(err)
-        except KeyError:
-            err = 'missing parameter \'initial_velocity\''
-            raise KeyError(err)
+        if not self.init_from_file:
+            try:
+                initial_density = (np.fromstring(param_dict['initial_density'], 
+                                                 sep=',') / units.cm**3) 
+                if len(initial_density) != self.n_species * self.n_cells_bgk:
+                    raise ValueError
+                self.initial_density = initial_density.reshape((self.n_cells_bgk,
+                                                                self.n_species))
+                logging.debug('initial density: ' +
+                              np.array_str(self.initial_density))
+            except ValueError:
+                err = ('\'density\' must be n_species x n_cells_bgk' +
+                       ' comma-separated floats')
+                raise ValueError(err)
+            except KeyError:
+                err = 'missing parameter \'initial_density\''
+                raise KeyError(err)
+            
+            try:
+                initial_temperature = \
+                        (np.fromstring(param_dict['initial_temperature'], sep=',')
+                         * units.eV)
+                if len(initial_temperature) is self.n_species * self.n_cells_bgk:
+                    self.initial_temperature = np.tile(initial_temperature.reshape(
+                            (self.n_cells_bgk, self.n_species, 1)), (1, 1, 3))
+                elif len(initial_temperature) is self.n_species * self.n_cells_bgk * 3:
+                    self.initial_temperature = initial_temperature.reshape(
+                            (self.n_cells_bgk, self.n_species, 3))
+                else:
+                    raise ValueError
+                logging.debug('initial temperature: ' +
+                              np.array_str(self.initial_temperature))
+            except ValueError:
+                err = ('\'temperature\' must be n_species x n_cells_bgk' +
+                       ' comma-separated floats')
+                raise ValueError(err)
+            except KeyError:
+                err = 'missing parameter \'initial_temperature\''
+                raise KeyError(err)
+    
+            try:
+                initial_velocity = (np.fromstring(param_dict['initial_velocity'],
+                                                  sep=',') * units.cm / units.s)
+                if len(initial_velocity) != self.n_species * self.n_cells_bgk:
+                    raise ValueError
+                self.initial_velocity = initial_velocity.reshape((self.n_cells_bgk,
+                                                                  self.n_species))
+                logging.debug('initial bulk velocity: ' +
+                              np.array_str(self.initial_velocity))
+            except ValueError:
+                err = ('\'velocity\' must be n_species x n_cells_bgk' +
+                       ' comma-separated floats')
+                raise ValueError(err)
+            except KeyError:
+                err = 'missing parameter \'initial_velocity\''
+                raise KeyError(err)
 
 
     def setup(self):
@@ -633,10 +662,12 @@ class simulation(object):
         if self.only_md:
             return
         logging.debug('removing old BGK files with same name as test case')
-        [os.remove(os.path.join(self.bgk_path, 'Data', f)) for f in
-         os.listdir(self.bgk_path) if f.startswith(self.testcase + '_')]
+        data_path = os.path.join(self.bgk_path, 'Data')
+        [os.remove(os.path.join(data_path, f)) for f in
+         os.listdir(data_path) if f.startswith(self.testcase + '_')]
         if os.path.exists(os.path.join(self.bgk_path, 'input', self.testcase)):
                 os.remove(os.path.join(self.bgk_path, 'input', self.testcase))
+
 
     def initialize(self):
         ''' initialize all the distributions and macro properties that we
@@ -648,24 +679,53 @@ class simulation(object):
         self.distribution = np.empty((self.n_cells_bgk, self.n_species),
                                      dtype=object)
         for cell in range(self.n_cells_bgk):
+            # no need if initializing distribution from file
+            if self.init_from_file:
+                break
+
             # compute mixture temperature for sufficiently wide velocity grid
-            mixture_temperature = (np.sum(self.initial_temperature[cell,:] * 
-                                          self.initial_density[cell,:]) /
-                                   self.initial_density[cell,:].sum())
+            mixture_velocity = (np.sum(self.mass *
+                                       self.initial_density[cell,:] *
+                                       self.initial_velocity[cell,:]) / 
+                                np.sum(self.mass *
+                                       self.initial_density[cell,:]))
+            logging.debug('computed initial mixture velocity of '
+                          + str(mixture_velocity))
+            mixture_temperature = (
+                np.sum((self.initial_temperature[cell,:].sum(axis=-1) + 
+                        self.mass * (self.initial_velocity[cell,:] -
+                                     mixture_velocity)**2) * 
+                       self.initial_density[cell,:] / 3.) /
+                self.initial_density[cell,:].sum())
+            logging.debug('computed initial mixture temperature of ' +
+                          str(mixture_temperature / units.eV) + ' eV')
             for sp in range(self.n_species):
                 # set grid based on maximum of mixture and species temperature
                 T_use = max(mixture_temperature,
-                            self.initial_temperature[cell,sp])
+                            self.initial_temperature[cell,sp].max())
                 v_thermal = np.sqrt(T_use / self.mass[sp])
                 vx = vy = vz = np.linspace(-8. * v_thermal, 8. * v_thermal,
                                            self.n_vel)
                 n = self.initial_density[cell,sp]
                 m = self.mass[sp]
                 u = np.array([self.initial_velocity[cell,sp], 0., 0.])
-                ke = self.initial_temperature[cell,sp] * 3./2.
+                ke = self.initial_temperature[cell,sp] / 2.
                 f = distributions.discrete_maxwellian3D(vx, vy, vz, m, n, u, ke)
                 self.distribution[cell,sp] = \
                        distributions.linear_interpolated_rv_3D(vx, vy, vz, f, m)
+
+        if self.init_from_file:
+            # load the initial distributions from the data file
+            bgk_params = bgk_io.bgk_parameters(
+                case=self.testcase, n_dims=self.n_dim,
+                length=self.cell_length_bgk, n_cells=self.n_cells_bgk,
+                n_vel=self.n_vel, timestep=self.timestep_bgk,
+                current_time=0.0, run_time=0.0, order=self.order,
+                implicit=self.implicit, data_rate=self.data_rate_bgk,
+                n_species=self.n_species, charge=self.charge, mass=self.mass,
+                bgk_path=self.bgk_path)
+            self.distribution[0,:] = bgk_io.read_distributions0D(bgk_params)
+
 
         # initialize taus, errors, and equilibrium functions
         logging.debug('intializing other data variables')
@@ -688,9 +748,10 @@ class simulation(object):
         self.tau_hist_f = open('md_taus.dat', 'w')
 
         # initialize macro properties
-        self.density = np.empty(self.initial_density.shape)
-        self.velocity = np.empty(self.initial_velocity.shape)
-        self.kinetic_energy = np.empty(self.initial_temperature.shape)
+        self.density = np.empty((self.n_cells_bgk, self.n_species))
+        self.velocity = np.empty((self.n_cells_bgk, self.n_species))
+        self.kinetic_energy = np.empty((self.n_cells_bgk, self.n_species))
+        self.stress = np.empty((self.n_cells_bgk, self.n_species, 3, 3))
         for cell in range(self.n_cells_bgk):
             for sp in range(self.n_species):
                 self.density[cell,sp] = self.distribution[cell,sp].density
@@ -698,6 +759,8 @@ class simulation(object):
                         self.distribution[cell,sp].momentum[0] / self.mass[sp]
                 self.kinetic_energy[cell,sp] = \
                         self.distribution[cell,sp].kinetic_energy
+                self.stress[cell,sp] = \
+                        self.distribution[cell,sp].stress
         
         # time tracking stuff
         self.current_time = 0.0
@@ -719,6 +782,24 @@ class simulation(object):
                                          self.n_species, self.n_species))
             self.smart_tau_times_f = open('smart_tau_times.dat', 'w')
             self.smart_taus_f = open('smart_taus.dat', 'w')
+
+        # distribution writing
+        if self.write_distribution:
+            data_path = os.path.join(self.bgk_path, 'Data')
+            self.distribution_file = np.empty((self.n_cells_bgk, self.n_species),
+                                              dtype=file)
+            for cell in range(self.n_cells_bgk):
+                for sp in range(self.n_species):
+                    self.distribution_file[cell,sp] = \
+                        open(os.path.join(data_path,
+                                          self.testcase + '_distribution' +
+                                          str(sp)), 'wb')
+                    self.distribution[cell,sp].write_cross_section(
+                        self.distribution_file[cell,sp])
+                    np.save(os.path.join(data_path,
+                                         self.testcase + '_distribution' +
+                                         str(sp) + '_grid'),
+                            self.distribution[cell,sp]._x)
 
 
     def taus_from_md(self):
@@ -748,14 +829,24 @@ class simulation(object):
             md_io.setup_md_workspace()
 
             # compute screening length
+            logging.debug('Computing screening length')
             electron_density = np.sum(self.charge * self.density[cell,:])
+            logging.debug('Electron density: ' + str(electron_density))
+            mixture_velocity = (np.sum(self.mass * self.velocity[cell,:] *
+                                       self.density[cell,:]) / 
+                                np.sum(self.mass * self.density[cell,:]))
+            logging.debug('Computed mixture velocity of ' + 
+                          str(mixture_velocity))
             mixture_temperature = (np.sum(self.density[cell,:] *
-                                          2./3. * self.kinetic_energy[cell,:]) /
+                                          (2./3. * self.kinetic_energy[cell,:] +
+                                           1./3. * self.mass * 
+                                           (self.velocity[cell,:] - 
+                                            mixture_velocity)**2)) /
                                    np.sum(self.density[cell,:]))
             screen_length = np.sqrt(mixture_temperature /
                                     (4. * np.pi * electron_density))
-            logging.debug('using mixture temperature %f and screen length %f' %
-                          (mixture_temperature, screen_length))
+            logging.debug('using mixture temperature %f eV and screen length %f' %
+                          (mixture_temperature / units.eV, screen_length))
 
             # 3D bulk velocity
             bulk_velocity = np.zeros((self.n_species,3))
@@ -782,7 +873,7 @@ class simulation(object):
                         movie_rate=self.movie_rate, n_species=self.n_species,
                         density=self.density[cell,:], mass=self.mass,
                         charge=self.charge, screen_length=screen_length,
-                        cutoff=cutoff, kinetic_energy=self.kinetic_energy[cell,:],
+                        cutoff=cutoff, stress=self.stress[cell,:],
                         bulk_velocity=bulk_velocity, friction=self.friction[0],
                         n_mts_timesteps=self.mts_timesteps_md,
                         mts_cutoff=self.mts_cutoff_md,
@@ -955,11 +1046,10 @@ class simulation(object):
                         run_to_completion = False
         logging.debug('run_to_completion: %d' % (run_to_completion))
 
-
         # set the parameters
         eps = 0.01*self.timestep_bgk
         logging.debug('setting bgk parameters')
-        if n_steps == 0 or run_to_completion:
+        if n_steps == 0:
             bgk_params = bgk_io.bgk_parameters(
                     case=self.testcase, n_dims=self.n_dim,
                     length=self.cell_length_bgk, n_cells=self.n_cells_bgk,
@@ -969,7 +1059,7 @@ class simulation(object):
                     order=self.order, implicit=self.implicit,
                     data_rate=self.data_rate_bgk, n_species=self.n_species,
                     charge=self.charge, distribution=self.distribution,
-                    taus=self.taus, run_to_completion=run_to_completion,
+                    taus=self.taus,
                     rhs_tol=self.rhs_tol_bgk, bgk_path=self.bgk_path)
         else:
             bgk_params = bgk_io.bgk_parameters(
@@ -981,17 +1071,42 @@ class simulation(object):
                     order=self.order, implicit=self.implicit,
                     data_rate=self.data_rate_bgk, n_species=self.n_species,
                     charge=self.charge, distribution=self.distribution,
-                    taus=self.taus, run_to_completion=False,
+                    taus=self.taus,
                     rhs_tol=0, bgk_path=self.bgk_path)
 
         # run the simulation
-        bgk_io.run_bgk_simulation(bgk_params)
+        if not run_to_completion:
+            bgk_io.run_bgk_simulation(bgk_params)
+    
+            # load the distributions
+            logging.info('Loading output data from the BGK simulation\n')
+            if self.n_dim is 0:
+                self.distribution[0,:], self.current_time = \
+                        bgk_io.read_distributions0D(bgk_params)
 
-        # load the distributions
-        logging.info('Loading output data from the BGK simulation\n')
-        if self.n_dim is 0:
-            self.distribution[0,:], self.current_time = \
-                    bgk_io.read_distributions0D(bgk_params)
+            if self.write_distribution:
+                for cell in range(self.n_cells_bgk):
+                    for sp in range(self.n_species):
+                        self.distribution[cell,sp].write_cross_section(
+                            self.distribution_file[cell,sp])
+        else:
+            counter = 0
+            while counter < self.tau_update_rate:
+                counter += 1
+                bgk_io.run_bgk_simulation(bgk_params)
+                bgk_params.current_time += self.timestep_bgk
+    
+                # load the distributions
+                logging.info('Loading output data from the BGK simulation\n')
+                if self.n_dim is 0:
+                    self.distribution[0,:], self.current_time = \
+                            bgk_io.read_distributions0D(bgk_params)
+
+                if self.write_distribution:
+                    for cell in range(self.n_cells_bgk):
+                        for sp in range(self.n_species):
+                            self.distribution[cell,sp].write_cross_section(
+                                self.distribution_file[cell,sp])
 
         if run_to_completion:
             self.done_flag = True
@@ -1009,6 +1124,8 @@ class simulation(object):
                         self.distribution[cell,sp].momentum[0] / self.mass[sp]
                 self.kinetic_energy[cell,sp] = \
                         self.distribution[cell,sp].kinetic_energy
+                self.stress[cell,sp] = \
+                        self.distribution[cell,sp].stress
 
 
     def march_simulation(self):
@@ -1228,8 +1345,13 @@ class simulation(object):
         # close files
         self.tau_times_f.close()
         self.tau_hist_f.close()
-        self.smart_tau_times_f.close()
-        self.smart_taus_f.close()
+        if self.smart_tau is not None:
+            self.smart_tau_times_f.close()
+            self.smart_taus_f.close()
+        if self.write_distribution:
+            for cell in range(self.n_cells_bgk):
+                for sp in range(self.n_species):
+                    self.distribution_file[cell,sp].close()
 
 
     def run_md(self):
@@ -1256,13 +1378,22 @@ class simulation(object):
 
             # compute screening length
             electron_density = np.sum(self.charge * self.density[cell,:])
+            logging.debug('Electron density: ' + str(electron_density))
+            mixture_velocity = (np.sum(self.mass * self.velocity[cell,:] *
+                                       self.density[cell,:]) / 
+                                np.sum(self.mass * self.density[cell,:]))
+            logging.debug('Computed mixture velocity of ' + 
+                          str(mixture_velocity))
             mixture_temperature = (np.sum(self.density[cell,:] *
-                                          2./3. * self.kinetic_energy[cell,:]) /
+                                          (2./3. * self.kinetic_energy[cell,:] +
+                                           1./3. * self.mass * 
+                                           (self.velocity[cell,:] - 
+                                            mixture_velocity)**2)) /
                                    np.sum(self.density[cell,:]))
             screen_length = np.sqrt(mixture_temperature /
                                     (4. * np.pi * electron_density))
-            logging.debug('using mixture temperature %f and screen length %f' %
-                          (mixture_temperature, screen_length))
+            logging.debug('using mixture temperature %f eV and screen length %f' %
+                          (mixture_temperature / units.eV, screen_length))
 
             # 3D bulk velocity
             bulk_velocity = np.zeros((self.n_species,3))
@@ -1284,7 +1415,7 @@ class simulation(object):
                     movie_rate=self.movie_rate, n_species=self.n_species,
                     density=self.density[cell,:], mass=self.mass,
                     charge=self.charge, screen_length=screen_length,
-                    cutoff=cutoff, kinetic_energy=self.kinetic_energy[cell,:],
+                    cutoff=cutoff, stress=self.stress[cell,:],
                     bulk_velocity=bulk_velocity, friction=self.friction[0],
                     n_mts_timesteps=self.mts_timesteps_md,
                     mts_cutoff=self.mts_cutoff_md,
