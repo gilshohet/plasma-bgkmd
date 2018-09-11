@@ -25,7 +25,7 @@ n_simulations_md : 1
 cell_length_md : 18
 cutoff_md : 8
 md_save_rate : 1000
-movie_rate : 100000
+movie_rate : 1000
 mts_cutoff_md : 0.5
 mts_threshold_md : 1e-5
 mts_timesteps_md : 100
