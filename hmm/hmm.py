@@ -1483,6 +1483,7 @@ class simulation(object):
                     resample=self.md_resample,
                     refresh_rate=0,
                     save_rate=self.md_save_rate,
+                    write_distribution=write_distribution,
                     resume=self.md_resume,
                     last_step=self.md_last_step)
 

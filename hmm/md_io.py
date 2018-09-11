@@ -177,7 +177,7 @@ class md_data(object):
         physical simulation time at each save point
     '''
 
-    def __init__(self, params):
+    def __init__(self, params, write_distribution=False, distribution=None):
         ''' load the data and generate the data object
 
         Parameters
@@ -203,6 +203,11 @@ class md_data(object):
                               params.n_species, 3))
         self.m4 = np.empty((params.n_sims, params.n_timesteps+1,
                             params.n_species))
+
+        if write_distribution:
+            self.write_distribution = True
+            self.vx_histo = np.empty((params.n_sims, params.n_timesteps+1,
+                                     params.n_species, len(distribution[0]._x)))
 
 
     def get_md_data(self, sim, step, params, md, distribution):
@@ -245,6 +250,13 @@ class md_data(object):
             self.heat[sim,step,sp,:] = heat
             self.m4[sim,step,sp] = m4
             self.velocity[sim,step,sp,:] = velocity
+
+            if self.write_distribution:
+                dx = distribution[sp]._x[1] - distribution[sp]._x[0]
+                grid = np.append(distribution[sp]._x,
+                                 distribution[sp]._x[-1] + dx)
+                self.vx_histo[sim,step,sp,:], _ = \
+                        np.histogram(vel[sp_start[sp]:sp_end[sp],0], grid)
 
         # compute dHdt
         dHdt = tau_utils.compute_dHdt(params, distribution, vel, forces)
@@ -734,8 +746,8 @@ def equilibrate_md(params, md, print_rate=10, save_rate=1000):
 
 def simulate_md(params, distribution, md, print_rate=10, resample=True,
                 atol=[1e-2, 1.5e-2, 2e-2], rtol=[1e-2, 1.5e-2, 2e-2, 2e-2],
-                refresh_rate=0, save_rate=1000, resume=False, last_step=0,
-                current_sim=0):
+                refresh_rate=0, save_rate=1000, write_distribution=False,
+                resume=False, last_step=0, current_sim=0):
     ''' run the specified number of md simulations for the desired number of
     time steps and collect data on energy, dHdt, and moments
 
@@ -761,6 +773,8 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
     save_rate : int
         how often to save the phasespace and data for restart
         0 -> never
+    write_distribution : boolean
+        whether to write distribution cross-section every time step
     resume : boolean
         whether resuming from a previous simulation
     last_step : int
@@ -780,7 +794,7 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
 
     # setup
     energy = np.empty((params.n_sims, params.n_timesteps+1, 3))
-    data = md_data(params)
+    data = md_data(params, write_distribution, distribution)
     md.parameters_mod.thermostaton = False
     pos0, vel0 = get_md_phasespace(md)
     prev_r = np.empty((3, params.n_particles))
@@ -919,6 +933,10 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
                 np.save('data.time', data.time)
                 np.save('end_pos', pos)
                 np.save('end_vel', vel)
+                if write_distribution:
+                    np.save('md_distribution',
+                            data.vx_histo /
+                            params.particles[np.newaxis,np.newaxis,:,np.newaxis])
 
             # update distributions if needed
             if refresh_rate > 0 and step % refresh_rate == 0:
