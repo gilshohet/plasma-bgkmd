@@ -41,8 +41,8 @@ def discrete_maxwellian3D(vx, vy, vz, mass=1.0, density=1.0,
 
     average_KE = np.array(average_KE)
     if len(average_KE.shape) == 0 or len(average_KE) == 1:
-        average_KE = average_KE.repeat(3)
-    temperature = 2. / 3. * average_KE
+        average_KE = average_KE.repeat(3) / 3.
+    temperature = 2. * average_KE
     w2 = ((vx - bulk_velocity[0])**2 / temperature[0] + 
           (vy - bulk_velocity[1])**2 / temperature[1] +
           (vz - bulk_velocity[2])**2 / temperature[2])
