@@ -935,7 +935,8 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
                 np.save('end_vel', vel)
                 if write_distribution:
                     np.save('md_distribution',
-                            data.vx_histo /
+                            data.vx_histo *
+                            params.density[np.newaxis,np.newaxis,:,np.newaxis]) / 
                             params.particles[np.newaxis,np.newaxis,:,np.newaxis])
 
             # update distributions if needed

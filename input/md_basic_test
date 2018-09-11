@@ -28,3 +28,4 @@ mts_cutoff_md : 0.5
 mts_threshold_md : 1e-5
 mts_timesteps_md : 100
 md_save_rate : 5
+write_distribution : True
