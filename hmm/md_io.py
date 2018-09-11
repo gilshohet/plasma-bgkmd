@@ -729,16 +729,6 @@ def equilibrate_md(params, md, print_rate=10, save_rate=1000):
         energy[step,:] = get_md_conservation(md)
         kinetic_energy[step,:] = get_md_kinetic_energy(params, md)
 
-        # save phasespace
-        if save_rate > 0 and step % save_rate == 0:
-            logging.debug('saving equilibration phase space at time step %d' % step)
-            pos, vel = get_md_phasespace(md)
-            species = np.array(md.particles_mod.sp[:])
-            species = species.reshape((params.n_particles, 1))
-            specposvel = np.concatenate((species, pos, vel), axis=1)
-            filename = 'equilibration_phasespace_step%d.dat' % (step)
-            specposvel.tofile(filename)
-
     return energy, kinetic_energy
 
 
