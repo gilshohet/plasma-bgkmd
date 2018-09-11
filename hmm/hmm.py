@@ -784,7 +784,7 @@ class simulation(object):
             self.smart_taus_f = open('smart_taus.dat', 'w')
 
         # distribution writing
-        if self.write_distribution:
+        if self.write_distribution and not self.only_md:
             data_path = os.path.join(self.bgk_path, 'Data')
             self.distribution_file = np.empty((self.n_cells_bgk, self.n_species),
                                               dtype=file)
@@ -1483,7 +1483,7 @@ class simulation(object):
                     resample=self.md_resample,
                     refresh_rate=0,
                     save_rate=self.md_save_rate,
-                    write_distribution=write_distribution,
+                    write_distribution=self.write_distribution,
                     resume=self.md_resume,
                     last_step=self.md_last_step)
 

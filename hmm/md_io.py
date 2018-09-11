@@ -257,6 +257,8 @@ class md_data(object):
                                  distribution[sp]._x[-1] + dx)
                 self.vx_histo[sim,step,sp,:], _ = \
                         np.histogram(vel[sp_start[sp]:sp_end[sp],0], grid)
+                self.vx_histo[sim,step,sp,:] *= \
+                        params.density[sp] / (dx * params.particles[sp])
 
         # compute dHdt
         dHdt = tau_utils.compute_dHdt(params, distribution, vel, forces)
@@ -934,10 +936,9 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
                 np.save('end_pos', pos)
                 np.save('end_vel', vel)
                 if write_distribution:
-                    np.save('md_distribution',
-                            data.vx_histo *
-                            params.density[np.newaxis,np.newaxis,:,np.newaxis]) / 
-                            params.particles[np.newaxis,np.newaxis,:,np.newaxis])
+                    np.save('md_distribution', data.vx_histo)
+                    np.save('histo_grid',
+                            np.stack([dist._x for dist in distribution]))
 
             # update distributions if needed
             if refresh_rate > 0 and step % refresh_rate == 0:
