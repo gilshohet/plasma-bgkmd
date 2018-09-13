@@ -203,9 +203,9 @@ class md_data(object):
                               params.n_species, 3))
         self.m4 = np.empty((params.n_sims, params.n_timesteps+1,
                             params.n_species))
+        self.write_distribution = write_distribution
 
-        if write_distribution:
-            self.write_distribution = True
+        if self.write_distribution:
             self.vx_histo = np.empty((params.n_sims, params.n_timesteps+1,
                                      params.n_species, len(distribution[0]._x)))
 

@@ -9,7 +9,8 @@ mass : 1.6726219e-24, 1.6726219e-24
 charge : 1.0, 1.0
 initial_density : 4.8e22, 1.2e22
 initial_temperature : 100, 100, 100, 25, 100, 100
-initial_velocity : 0, 20761682.977887515
+initial_velocity : 0, 29361453.645019144
+                      
 
 # BGK simulation parameters
 n_vel : 100
@@ -25,6 +26,7 @@ n_simulations_md : 1
 cell_length_md : 18
 cutoff_md : 8
 md_save_rate : 1000
+write_distribution : True
 movie_rate : 1000
 mts_cutoff_md : 0.5
 mts_threshold_md : 1e-5
