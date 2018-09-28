@@ -663,8 +663,13 @@ class simulation(object):
             return
         logging.debug('removing old BGK files with same name as test case')
         data_path = os.path.join(self.bgk_path, 'Data')
-        [os.remove(os.path.join(data_path, f)) for f in
-         os.listdir(data_path) if f.startswith(self.testcase + '_')]
+        if not self.init_from_file:
+            [os.remove(os.path.join(data_path, f)) for f in
+             os.listdir(data_path) if f.startswith(self.testcase + '_')]
+        else:
+            [os.remove(os.path.join(data_path, f)) for f in
+             os.listdir(data_path) if f.startswith(self.testcase + '_') and
+             'spec' not in f and 'gridinfo' not in f]
         if os.path.exists(os.path.join(self.bgk_path, 'input', self.testcase)):
                 os.remove(os.path.join(self.bgk_path, 'input', self.testcase))
 
@@ -724,7 +729,7 @@ class simulation(object):
                 implicit=self.implicit, data_rate=self.data_rate_bgk,
                 n_species=self.n_species, charge=self.charge, mass=self.mass,
                 bgk_path=self.bgk_path)
-            self.distribution[0,:] = bgk_io.read_distributions0D(bgk_params)
+            self.distribution[0,:], _ = bgk_io.read_distributions0D(bgk_params)
 
 
         # initialize taus, errors, and equilibrium functions

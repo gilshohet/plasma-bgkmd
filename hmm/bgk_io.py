@@ -60,8 +60,8 @@ class bgk_parameters(object):
                   implicit=False, data_rate=1, n_species=1, charge=[1.0],
                   mass=None, distribution=None, taus=None,
                   rhs_tol=1.0, bgk_path='.'):
-        if distribution is None:
-            raise ValueError('Need to specify the distributions at a minimum.')
+        if distribution is None and mass is None:
+            raise ValueError('Need to specify at least mass or distribution')
         self.case = case
         self.n_dims = n_dims
         self.length = length
