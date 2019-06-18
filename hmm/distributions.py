@@ -362,3 +362,12 @@ class linear_interpolated_rv_3D(object):
         
         np.save(filehandle, np.trapz(np.trapz(self.distribution, self._z, axis=2),
                                      self._y, axis=1))
+        filehandle.flush()
+
+    def write_distribution(self, filehandle):
+        '''
+        write the full 3D distribution
+        '''
+        
+        np.save(filehandle, self.distribution)
+        filehandle.flush()

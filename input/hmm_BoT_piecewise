@@ -29,7 +29,8 @@ data_rate_bgk : 1
 run_to_completion_tol : 1e-2
 rhs_tol_bgk : 0.95
 bgk_path : ~/Multi-BGK/
-write_distribution: True
+write_cross_section: True
+write_distribution: 1
 
 # MD simulation parameters
 timestep_md : 0.0005

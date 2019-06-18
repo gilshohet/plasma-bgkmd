@@ -280,7 +280,8 @@ def write_distributions0D(params):
         for sp in range(params.n_species):
             f.write('%d %d %.5E\n' % (sp, params.n_vel,
                     params.distribution[0,sp]._x[-1] * units.s / units.cm))
-        f.write('%.8E' % params.current_time)
+        f.write('%.8E\n' % params.current_time)
+        f.write('%d' % int(params.current_time / params.timestep))
     # then write the distributions
     path = params.bgk_path + 'Data/' + params.case
     for sp in range(params.n_species):

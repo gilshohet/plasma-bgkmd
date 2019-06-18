@@ -1,4 +1,4 @@
-''' tools for running an hmm using the MD and BGk codes
+''' iools for running an hmm using the MD and BGk codes
 
 All of the file i/o and control structures necessary to run an HMM simulation
 given the simulation parameters.
@@ -94,8 +94,10 @@ class simulation(object):
         tolerance for when to send it back to MD from BGK
     data_rate_bgk : int
         how often to write data to file in the bgk simulations
-    write_distribution : int
+    write_cross_section : int
         whether to write a distribution cross-section each time step
+    write_distribution : int
+        whether to write the full 3D distribution at each time step
     bgk_path : string
         path to the main BGK folder
 
@@ -407,10 +409,18 @@ class simulation(object):
             logging.debug('bgk data rate unspecified, defaulting to every step')
 
         try:
-            self.write_distribution = int(bool(param_dict['write_distribution']
+            self.write_cross_section = int(bool(param_dict['write_cross_section']
                                            not in ['F', 'f', 'False',
                                                    'false', '0']))
-            logging.debug('write distribution: %d' %
+            logging.debug('write cross section: %d' %
+                          self.write_cross_section)
+        except KeyError:
+            self.write_cross_section = 0
+            logging.debug('write cross section unspecified, defaulting to false')
+
+        try:
+            self.write_distribution = int(param_dict['write_distribution'])
+            logging.debug('write cross section: %d' %
                           self.write_distribution)
         except KeyError:
             self.write_distribution = 0
@@ -789,6 +799,23 @@ class simulation(object):
             self.smart_taus_f = open('smart_taus.dat', 'w')
 
         # distribution writing
+        if self.write_cross_section and not self.only_md:
+            data_path = os.path.join(self.bgk_path, 'Data')
+            self.cross_section_file = np.empty((self.n_cells_bgk, self.n_species),
+                                              dtype=file)
+            for cell in range(self.n_cells_bgk):
+                for sp in range(self.n_species):
+                    self.cross_section_file[cell,sp] = \
+                        open(os.path.join(data_path,
+                                          self.testcase + '_cross_section' +
+                                          str(sp)), 'wb')
+                    self.distribution[cell,sp].write_cross_section(
+                        self.cross_section_file[cell,sp])
+                    np.save(os.path.join(data_path,
+                                         self.testcase + '_cross_section' +
+                                         str(sp) + '_grid'),
+                            self.distribution[cell,sp]._x)
+
         if self.write_distribution and not self.only_md:
             data_path = os.path.join(self.bgk_path, 'Data')
             self.distribution_file = np.empty((self.n_cells_bgk, self.n_species),
@@ -799,7 +826,7 @@ class simulation(object):
                         open(os.path.join(data_path,
                                           self.testcase + '_distribution' +
                                           str(sp)), 'wb')
-                    self.distribution[cell,sp].write_cross_section(
+                    self.distribution[cell,sp].write_distribution(
                         self.distribution_file[cell,sp])
                     np.save(os.path.join(data_path,
                                          self.testcase + '_distribution' +
@@ -1089,10 +1116,15 @@ class simulation(object):
                 self.distribution[0,:], self.current_time = \
                         bgk_io.read_distributions0D(bgk_params)
 
-            if self.write_distribution:
+            if self.write_cross_section:
                 for cell in range(self.n_cells_bgk):
                     for sp in range(self.n_species):
                         self.distribution[cell,sp].write_cross_section(
+                            self.cross_section_file[cell,sp])
+            if self.write_distribution:
+                for cell in range(self.n_cells_bgk):
+                    for sp in range(self.n_species):
+                        self.distribution[cell,sp].write_distribution(
                             self.distribution_file[cell,sp])
         else:
             counter = 0
@@ -1107,10 +1139,15 @@ class simulation(object):
                     self.distribution[0,:], self.current_time = \
                             bgk_io.read_distributions0D(bgk_params)
 
-                if self.write_distribution:
+                if self.write_cross_section:
                     for cell in range(self.n_cells_bgk):
                         for sp in range(self.n_species):
                             self.distribution[cell,sp].write_cross_section(
+                                self.cross_section_file[cell,sp])
+                if self.write_distribution:
+                    for cell in range(self.n_cells_bgk):
+                        for sp in range(self.n_species):
+                            self.distribution[cell,sp].write_distribution(
                                 self.distribution_file[cell,sp])
 
         if run_to_completion:
@@ -1353,6 +1390,10 @@ class simulation(object):
         if self.smart_tau is not None:
             self.smart_tau_times_f.close()
             self.smart_taus_f.close()
+        if self.write_cross_section:
+            for cell in range(self.n_cells_bgk):
+                for sp in range(self.n_species):
+                    self.cross_section_file[cell,sp].close()
         if self.write_distribution:
             for cell in range(self.n_cells_bgk):
                 for sp in range(self.n_species):
@@ -1488,6 +1529,7 @@ class simulation(object):
                     resample=self.md_resample,
                     refresh_rate=0,
                     save_rate=self.md_save_rate,
+                    write_cross_section=self.write_cross_section,
                     write_distribution=self.write_distribution,
                     resume=self.md_resume,
                     last_step=self.md_last_step)

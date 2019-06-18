@@ -26,7 +26,8 @@ n_simulations_md : 1
 cell_length_md : 18
 cutoff_md : 8
 md_save_rate : 1000
-write_distribution : True
+write_cross_section : True
+write_distribution : 275
 movie_rate : 1000
 mts_cutoff_md : 0.5
 mts_threshold_md : 1e-5

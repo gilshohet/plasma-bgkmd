@@ -177,7 +177,7 @@ class md_data(object):
         physical simulation time at each save point
     '''
 
-    def __init__(self, params, write_distribution=False, distribution=None):
+    def __init__(self, params, write_cross_section=False, distribution=None):
         ''' load the data and generate the data object
 
         Parameters
@@ -203,9 +203,9 @@ class md_data(object):
                               params.n_species, 3))
         self.m4 = np.empty((params.n_sims, params.n_timesteps+1,
                             params.n_species))
-        self.write_distribution = write_distribution
+        self.write_cross_section = write_cross_section
 
-        if self.write_distribution:
+        if self.write_cross_section:
             self.vx_histo = np.empty((params.n_sims, params.n_timesteps+1,
                                      params.n_species, len(distribution[0]._x)))
 
@@ -251,7 +251,7 @@ class md_data(object):
             self.m4[sim,step,sp] = m4
             self.velocity[sim,step,sp,:] = velocity
 
-            if self.write_distribution:
+            if self.write_cross_section:
                 dx = distribution[sp]._x[1] - distribution[sp]._x[0]
                 grid = np.append(distribution[sp]._x,
                                  distribution[sp]._x[-1] + dx)
@@ -748,8 +748,8 @@ def equilibrate_md(params, md, print_rate=10, save_rate=1000):
 
 def simulate_md(params, distribution, md, print_rate=10, resample=True,
                 atol=[1e-2, 1.5e-2, 2e-2], rtol=[1e-2, 1.5e-2, 2e-2, 2e-2],
-                refresh_rate=0, save_rate=1000, write_distribution=False,
-                resume=False, last_step=0, current_sim=0):
+                refresh_rate=0, save_rate=1000, write_cross_section=False,
+                write_distribution=False, resume=False, last_step=0, current_sim=0):
     ''' run the specified number of md simulations for the desired number of
     time steps and collect data on energy, dHdt, and moments
 
@@ -775,8 +775,10 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
     save_rate : int
         how often to save the phasespace and data for restart
         0 -> never
-    write_distribution : boolean
+    write_cross_section : boolean
         whether to write distribution cross-section every time step
+    write_distribution : int
+        whether to write distribution (and how often)
     resume : boolean
         whether resuming from a previous simulation
     last_step : int
@@ -793,10 +795,9 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
         all the moments and dHdt from throughout the simulation
     '''
 
-
     # setup
     energy = np.empty((params.n_sims, params.n_timesteps+1, 3))
-    data = md_data(params, write_distribution, distribution)
+    data = md_data(params, write_cross_section, distribution)
     md.parameters_mod.thermostaton = False
     pos0, vel0 = get_md_phasespace(md)
     prev_r = np.empty((3, params.n_particles))
@@ -810,6 +811,13 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
         distribution_log[:,0,:] = \
                 np.array(distribution)[np.newaxis,np.newaxis,:]
         log_counter = 1
+    if write_distribution > 0:
+        distribution_file = np.empty(params.n_species, dtype=file)
+        for sp in range(params.n_species):
+            distribution_file[sp] = open('distribution' + str(sp), 'wb')
+            np.save('distribution' + str(sp) + '_grid', distribution[sp]._x)
+        distribution_counter = 0
+        v_hist = np.empty((write_distribution, params.n_particles, 3))
 
     # loop over simulations
     for sim in range(current_sim, params.n_sims):
@@ -876,6 +884,38 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
             prev_a[1,:] = md.particles_mod.ay[:]
             prev_a[2,:] = md.particles_mod.az[:]
 
+            # distribution output if needed
+            if write_distribution > 0:
+                v_hist[distribution_counter,:,0] = md.particles_mod.vx[:]
+                v_hist[distribution_counter,:,1] = md.particles_mod.vy[:]
+                v_hist[distribution_counter,:,2] = md.particles_mod.vz[:]
+                distribution_counter += 1
+                
+                if distribution_counter == write_distribution:
+                    distribution_counter = 0
+                    dx = distribution[sp]._x[1] - distribution[sp]._x[0]
+                    dy = distribution[sp]._y[1] - distribution[sp]._y[0]
+                    dz = distribution[sp]._z[1] - distribution[sp]._z[0]
+                    x_grid = np.append(distribution[sp]._x,
+                                       distribution[sp]._x[-1] + dx)
+                    y_grid = np.append(distribution[sp]._y,
+                                       distribution[sp]._y[-1] + dy)
+                    z_grid = np.append(distribution[sp]._z,
+                                       distribution[sp]._z[-1] + dz)
+                    sp_end = np.cumsum(params.particles)
+                    sp_start = sp_end - params.particles
+                    logging.debug('saving distribution from particles at step %d' % step)
+                    for sp in range(params.n_species):
+                        sp_vel = v_hist[:,sp_start[sp]:sp_end[sp],:].reshape(
+                                params.particles[sp] * write_distribution, 3)
+                        sp_distribution, _ = np.histogramdd(
+                                sp_vel, bins=(x_grid, y_grid, z_grid))
+                        integral = np.trapz(np.trapz(np.trapz(
+                            sp_distribution, distribution[sp]._x),
+                            distribution[sp]._y), distribution[sp]._z)
+                        sp_distribution *= params.density[sp] / integral
+                        np.save(distribution_file[sp], sp_distribution)
+
             md.evl()
             if md.parameters_mod.outofbounds:
                 raise ValueError('particle flew out of the domain')
@@ -935,7 +975,7 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
                 np.save('data.time', data.time)
                 np.save('end_pos', pos)
                 np.save('end_vel', vel)
-                if write_distribution:
+                if write_cross_section:
                     np.save('md_distribution', data.vx_histo)
                     np.save('histo_grid',
                             np.stack([dist._x for dist in distribution]))
@@ -969,6 +1009,9 @@ def simulate_md(params, distribution, md, print_rate=10, resample=True,
             md.openfiles()
 
 
+    if write_distribution > 0:
+        for sp in range(params.n_species):
+            distribution_file[sp].close()
     if refresh_rate > 0:
         return energy, data, distribution_log
     else:
