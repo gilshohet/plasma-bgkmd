@@ -40,6 +40,7 @@ simulation requires the separate code.
 
 
 ## HMM input file
+**Note: the list of inputs below is somewhat outdated. See `hmm.py` for a more complete list.**
 
 ### Syntax
 
